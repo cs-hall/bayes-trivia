@@ -3,7 +3,7 @@ import { GameDifficulty } from "../types/game";
 import { GameMode, SelectionRoute } from "../types/routes";
 import { getSelectionRouteShareLabel } from "./categories";
 const PRODUCTION_ORIGIN = "https://wikitrivia.tomjwatson.com";
-const SHARE_BRAND_LABEL = "#wikitrivia";
+const SHARE_BRAND_LABEL = "#bayestrivia";
 const SHARE_RESULT_CORRECT = "🟩";
 const SHARE_RESULT_INCORRECT = "🟥";
 

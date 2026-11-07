@@ -316,16 +316,16 @@ export default function MenuFlowShell() {
     path === "/"
       ? undefined
       : path === "/daily"
-        ? "Daily | Wikitrivia"
+        ? "Daily | Bayes-trivia"
         : activeSelectionRoute
-          ? `${getSelectionRouteShareLabel(activeSelectionRoute)} | Wikitrivia`
+          ? `${getSelectionRouteShareLabel(activeSelectionRoute)} | Bayes-trivia`
           : group
-            ? `${group.title} | Wikitrivia`
+            ? `${group.title} | Bayes-trivia`
             : currentPlayView === "featured"
-              ? "Featured | Wikitrivia"
+              ? "Featured | Bayes-trivia"
               : currentPlayView === "browse"
-                ? "Browse | Wikitrivia"
-                : "Free Play | Wikitrivia";
+                ? "Browse | Bayes-trivia"
+                : "Free Play | Bayes-trivia";
   const freePlayItems = React.useMemo(() => {
     const visibleCategories = getCategoryDefinitions().filter((category) => {
       if (!deckNodes) {

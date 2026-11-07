@@ -325,7 +325,8 @@ export default function GapOddsPanel(props: Props) {
   const topRowSigma = map.rows[map.rows.length - 1].sigma;
   let selectedText: React.ReactNode = (
     <span className={styles.muted}>
-      Drag over a gap, tap a gap in the curves, or tap the map to guess.
+      Posterior: drag over a gap, tap a gap in the curves, or tap the map to set
+      a prior.
     </span>
   );
   if (selected && summary) {
@@ -334,15 +335,15 @@ export default function GapOddsPanel(props: Props) {
         ? "Hovering"
         : pinnedGap !== null
           ? "Selected"
-          : "Guess's gap";
+          : "Prior's gap";
     const gapLabel = (
       <span className={styles.strong}>{formatGap(selected)}</span>
     );
     if (summary.maxSigma === null || summary.muRange === null) {
       selectedText = (
         <>
-          {source} {gapLabel}: never the best pick for ± {SIGMA_MIN}–{SIGMA_MAX}{" "}
-          yrs
+          Posterior · {source} {gapLabel}: never the best pick for ± {SIGMA_MIN}
+          –{SIGMA_MAX} yrs
         </>
       );
     } else {
@@ -352,7 +353,7 @@ export default function GapOddsPanel(props: Props) {
           : `± up to ${Math.round(summary.maxSigma)}`;
       selectedText = (
         <>
-          {source} {gapLabel}: right call for guesses{" "}
+          Posterior · {source} {gapLabel}: right call for priors{" "}
           {formatYear(summary.muRange[0])} to {formatYear(summary.muRange[1])},{" "}
           {sigmaPart} yrs · lands here{" "}
           <span className={styles.strong}>
@@ -371,7 +372,7 @@ export default function GapOddsPanel(props: Props) {
     const runnerUp = ranked[1];
     guessText = (
       <>
-        Guess → best{" "}
+        Prior → best{" "}
         <span className={styles.strong}>{formatGap(guessGap)}</span> ·{" "}
         <span className={styles.strong}>{Math.round(ranked[0].p * 100)}%</span>
         {runnerUp ? (
@@ -394,7 +395,7 @@ export default function GapOddsPanel(props: Props) {
     <section aria-label="Gap odds" className={styles.panel}>
       <div className={styles.headerRow}>
         <label className={styles.strong} htmlFor="gap-odds-year">
-          Guess
+          Prior
         </label>
         <input
           className={styles.yearInput}
@@ -430,7 +431,7 @@ export default function GapOddsPanel(props: Props) {
           <span className={styles.guessSwatch} />
           {guessText ?? (
             <span className={styles.muted}>
-              Your guess: type a year (500 BC ok) and ± years
+              Prior: type a year (500 BC ok) and ± years
             </span>
           )}
         </div>
@@ -461,7 +462,7 @@ export default function GapOddsPanel(props: Props) {
             height={TOTAL_HEIGHT}
             onPointerDown={handlePointer}
             role="img"
-            aria-label="Top: probability curves over the timeline. Bottom: which gap is the best pick for each guess year (across) and uncertainty (up)."
+            aria-label="Top: prior and posterior curves over the timeline. Bottom: which gap is the best pick for each prior year (across) and uncertainty (up)."
             width={width}
           >
             {/* Highlighted gap bands in the curve chart */}

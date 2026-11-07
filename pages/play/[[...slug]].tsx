@@ -101,10 +101,10 @@ export default function FreePlayPage(props: Props) {
     pendingSelectionRoute ??
     (props.kind === "game" ? props.selectionRoute : null);
   const pageTitle = activeSelectionRoute
-    ? `${getSelectionRouteShareLabel(activeSelectionRoute)} | Wikitrivia`
+    ? `${getSelectionRouteShareLabel(activeSelectionRoute)} | Bayes-trivia`
     : group
-      ? `${group.title} | Wikitrivia`
-      : "Free Play | Wikitrivia";
+      ? `${group.title} | Bayes-trivia`
+      : "Free Play | Bayes-trivia";
   const items = React.useMemo(() => {
     const visibleCategories = getCategoryDefinitions().filter((category) => {
       if (!deckNodes) {

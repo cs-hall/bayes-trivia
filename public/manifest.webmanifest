@@ -15,9 +15,9 @@
     }
   ],
   "id": "/",
-  "name": "Wikitrivia",
+  "name": "Bayes-trivia",
   "scope": "/",
-  "short_name": "Wikitrivia",
+  "short_name": "Bayes-trivia",
   "start_url": "/",
   "theme_color": "#f8f8f8"
 }

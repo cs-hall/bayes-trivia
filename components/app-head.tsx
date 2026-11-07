@@ -5,7 +5,7 @@ interface Props {
 }
 
 export default function AppHead(props: Props) {
-  const { title = "Wikitrivia" } = props;
+  const { title = "Bayes-trivia" } = props;
 
   return (
     <Head>
@@ -44,10 +44,10 @@ export default function AppHead(props: Props) {
         sizes="180x180"
       />
       <link rel="manifest" href="/manifest.webmanifest" />
-      <meta name="application-name" content="Wikitrivia" />
+      <meta name="application-name" content="Bayes-trivia" />
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-      <meta name="apple-mobile-web-app-title" content="Wikitrivia" />
+      <meta name="apple-mobile-web-app-title" content="Bayes-trivia" />
       <meta name="mobile-web-app-capable" content="yes" />
       <meta name="theme-color" content="#f8f8f8" />
     </Head>
