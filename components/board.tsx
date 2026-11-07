@@ -6,6 +6,15 @@ import {
   drawNextCard,
   preloadImage,
 } from "../lib/game-selection";
+import { parseYear } from "../lib/gap-odds";
+import { HiddenDatesContext } from "../lib/hidden-dates-context";
+import {
+  buildHiddenBoard,
+  buildHiddenDecisionMap,
+  Prior,
+  PRIOR_SIGMA_MAX,
+  PRIOR_SIGMA_MIN,
+} from "../lib/hidden-posterior";
 import {
   createPlacementAnimationState,
   PlacementAnimationState,
@@ -14,9 +23,9 @@ import {
 import { GameDifficulty, GameState } from "../types/game";
 import { PreparedCard } from "../types/game";
 import { GameMode, SelectionRoute } from "../types/routes";
+import BayesPanel from "./bayes-panel";
 import DealAnimationLayer from "./deal-animation-layer";
 import GameOver from "./game-over";
-import GapOddsPanel from "./gap-odds-panel";
 import Lives from "./lives";
 import NextItemList from "./next-item-list";
 import PlacementAnimationLayer from "./placement-animation-layer";
@@ -31,6 +40,26 @@ const OPENING_DEAL_DELAY_MS = 500;
 const OPENING_DEAL_DURATION_MS = 820;
 const EDGE_SCROLL_THRESHOLD = 36;
 const EDGE_SCROLL_MAX_STEP = 10;
+
+const VAGUE_PRIOR_SIGMA = 1000;
+
+function parsePrior(yearText: string, sigmaText: string): Prior | null {
+  const mu = parseYear(yearText);
+  const sigma = Number(sigmaText);
+  if (mu === null || !Number.isFinite(sigma) || sigma <= 0) return null;
+  return {
+    mu,
+    sigma: Math.min(PRIOR_SIGMA_MAX, Math.max(PRIOR_SIGMA_MIN, sigma)),
+  };
+}
+
+function formatEstimate(median: number, sd: number) {
+  const year = Math.round(median);
+  const yearText = year < 0 ? `${Math.abs(year)} BC` : String(year);
+  const spread =
+    sd < 10 ? Math.max(1, Math.round(sd)) : Number(sd.toPrecision(2));
+  return `≈${yearText} ±${spread}`;
+}
 
 function clampEdgeScrollProgress(progress: number) {
   return Math.max(0, Math.min(1, progress));
@@ -103,6 +132,13 @@ export default function Board(props: Props) {
   const [hiddenPlayedCardId, setHiddenPlayedCardId] = React.useState<
     null | string
   >(null);
+  const [priorYearText, setPriorYearText] = React.useState("");
+  const [priorSigmaText, setPriorSigmaText] = React.useState("50");
+  const [openingConfirmedId, setOpeningConfirmedId] = React.useState<
+    null | string
+  >(null);
+  const [priorNudge, setPriorNudge] = React.useState(0);
+  const currentPrior = parsePrior(priorYearText, priorSigmaText);
   const boardRef = React.useRef<HTMLDivElement | null>(null);
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
   const deckAnchorRef = React.useRef<HTMLDivElement | null>(null);
@@ -177,6 +213,7 @@ export default function Board(props: Props) {
               correct: true,
               justPlaced: false,
               placementIndex: nextPlacementIndex,
+              prior: currentPrior ?? undefined,
               showDate: false,
             },
           },
@@ -199,7 +236,7 @@ export default function Board(props: Props) {
         nextButOne: upcomingCard,
       });
     },
-    [nextPlacementIndex, setState, state],
+    [currentPrior, nextPlacementIndex, setState, state],
   );
 
   const handleDeckAnchorChange = React.useCallback(
@@ -355,6 +392,7 @@ export default function Board(props: Props) {
         correct,
         justPlaced: false,
         placementIndex: nextPlacementIndex,
+        prior: currentPrior ?? undefined,
         showDate: false,
       },
     });
@@ -410,6 +448,12 @@ export default function Board(props: Props) {
     setPreviewIndex(null);
 
     if (state.next === null || droppedIndex === null || rect === null) {
+      return false;
+    }
+
+    if (currentPrior === null) {
+      // Every card needs a prior before it can be placed.
+      setPriorNudge((value) => value + 1);
       return false;
     }
 
@@ -504,7 +548,8 @@ export default function Board(props: Props) {
       openingDealInFlight ||
       openingDeal !== null ||
       state.next === null ||
-      state.played.length !== 0
+      state.played.length !== 0 ||
+      openingConfirmedId !== state.next.id
     ) {
       return;
     }
@@ -536,6 +581,7 @@ export default function Board(props: Props) {
       window.clearTimeout(timeoutId);
     };
   }, [
+    openingConfirmedId,
     openingDeal,
     openingDealInFlight,
     showLivesScene,
@@ -655,20 +701,73 @@ export default function Board(props: Props) {
     }
   }, [score, highscore, updateHighscore]);
 
-  const playedYears = React.useMemo(
-    () => state.played.map((card) => card.year),
-    [state.played],
-  );
-  const latestYear = React.useMemo(() => {
-    let latest: null | { index: number; year: number } = null;
-    state.played.forEach((card, index) => {
-      const placement = card.played.placementIndex ?? index;
+  // New card on deck: its prior starts empty (keep the ± as a default).
+  const nextCardId = state.next?.id ?? null;
+  React.useEffect(() => {
+    setPriorYearText("");
+  }, [nextCardId]);
+
+  const latestIndex = React.useMemo(() => {
+    let latest: null | { index: number; position: number } = null;
+    state.played.forEach((card, position) => {
+      const placement = card.played.placementIndex ?? position;
       if (latest === null || placement > latest.index) {
-        latest = { index: placement, year: card.year };
+        latest = { index: placement, position };
       }
     });
-    return latest === null ? null : (latest as { year: number }).year;
+    return latest === null ? null : (latest as { position: number }).position;
   }, [state.played]);
+
+  const priorsKey = state.played
+    .map(
+      (card) =>
+        `${card.id}:${card.played.prior?.mu}:${card.played.prior?.sigma}`,
+    )
+    .join("|");
+  const hidden = React.useMemo(() => {
+    if (state.played.length === 0) return null;
+    const known = state.played
+      .map((card) => card.played.prior)
+      .filter((prior): prior is Prior => prior !== undefined);
+    const fallbackMu =
+      known.length > 0
+        ? known.reduce((sum, prior) => sum + prior.mu, 0) / known.length
+        : 1500;
+    const priors = state.played.map(
+      (card) =>
+        card.played.prior ?? { mu: fallbackMu, sigma: VAGUE_PRIOR_SIGMA },
+    );
+    const board = buildHiddenBoard(priors);
+    return { board, map: buildHiddenDecisionMap(board) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priorsKey]);
+
+  const revealed = state.lives <= 0 || isDeckExhausted;
+  const hiddenDatesValue = React.useMemo(() => {
+    const labels: Record<string, string> = {};
+    if (hidden) {
+      state.played.forEach((card, index) => {
+        const posterior = hidden.board.posteriors[index];
+        if (posterior) {
+          labels[card.id] = formatEstimate(posterior.median, posterior.sd);
+        }
+      });
+    }
+    return { labels, revealed };
+  }, [hidden, revealed, state.played]);
+
+  const handleReveal = React.useCallback(() => {
+    if (isPlacementSettling || state.lives <= 0) return;
+    setState({ ...state, lives: 0 });
+  }, [isPlacementSettling, setState, state]);
+
+  const awaitingFirstCard =
+    state.played.length === 0 &&
+    state.next !== null &&
+    openingConfirmedId !== state.next.id &&
+    !openingDealInFlight &&
+    openingDeal === null;
+
   const [gapOddsOpen, setGapOddsOpen] = React.useState(true);
   React.useEffect(() => {
     try {
@@ -686,151 +785,171 @@ export default function Board(props: Props) {
       // ignore
     }
   }, []);
-  const showGapOdds = showLives && playedYears.length > 0;
-  const gapOddsExpanded = showGapOdds && gapOddsOpen;
+  const showPanel = showLives || revealed;
+  const gapOddsExpanded = showPanel && (gapOddsOpen || awaitingFirstCard);
 
   return (
-    <div
-      ref={boardRef}
-      className={classNames(styles.wrapper, {
-        [styles.wrapperWithOdds]: gapOddsExpanded,
-      })}
-    >
-      {showGapOdds ? (
-        <GapOddsPanel
-          dragGap={isDragging ? previewIndex : null}
-          latestYear={latestYear}
-          onOpenChange={handleGapOddsOpenChange}
-          open={gapOddsOpen}
-          years={playedYears}
-        />
-      ) : null}
+    <HiddenDatesContext.Provider value={hiddenDatesValue}>
       <div
-        className={classNames(styles.top, {
-          [styles.topGameOver]: showGameOverSummary,
-          [styles.topWithOdds]: gapOddsExpanded,
+        ref={boardRef}
+        className={classNames(styles.wrapper, {
+          [styles.wrapperWithOdds]: gapOddsExpanded,
         })}
       >
-        <div className={styles.statusArea}>
-          <AnimatePresence mode="wait">
-            {statusScene === "lives" ? (
-              <motion.div
-                key="lives"
-                animate={{ opacity: gameOverPhase === "hud-exit" ? 0 : 1 }}
-                className={styles.statusLayer}
-                exit={{ opacity: 0 }}
-                initial={false}
-                transition={{ duration: 0.28, ease: "easeOut" }}
-              >
-                <Lives lives={state.lives} />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="game-over"
-                animate={{ opacity: 1 }}
-                className={styles.statusLayer}
-                exit={{ opacity: 0 }}
-                initial={restoredCompletedGame ? false : { opacity: 0 }}
-                transition={{ duration: 0.28, ease: "easeOut" }}
-              >
-                <GameOver
-                  showImmediately={restoredCompletedGame}
-                  dailyDateKey={dailyDateKey}
-                  difficulty={difficulty}
-                  gameMode={gameMode}
-                  highscore={highscore}
-                  played={state.played}
-                  resetGame={resetGame}
-                  routePath={routePath}
-                  score={score}
-                  selectionRoute={selectionRoute}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-        {deckVisible && renderedDeckState ? (
-          <NextItemList
-            deckAnchorRef={deckAnchorRef}
-            deckState={renderedDeckState.deckState}
-            next={openingDealInFlight ? null : renderedDeckState.next}
-            onDeckAnchorChange={handleDeckAnchorChange}
-            onCardDragMove={(point, rect) => {
-              if (rect) {
-                const nextDragCentreX = rect.left + rect.width / 2;
-                const lastDragCentreX = lastDragCentreXRef.current;
+        {showPanel ? (
+          <BayesPanel
+            awaitingFirstCard={awaitingFirstCard}
+            board={hidden?.board ?? null}
+            canReveal={
+              !revealed && !isPlacementSettling && state.played.length > 0
+            }
+            dragGap={isDragging ? previewIndex : null}
+            latestIndex={latestIndex}
+            map={hidden?.map ?? null}
+            nudge={priorNudge}
+            onConfirmFirstCard={() => {
+              if (state.next && currentPrior)
+                setOpeningConfirmedId(state.next.id);
+              else setPriorNudge((value) => value + 1);
+            }}
+            onOpenChange={handleGapOddsOpenChange}
+            onReveal={handleReveal}
+            onSigmaTextChange={setPriorSigmaText}
+            onYearTextChange={setPriorYearText}
+            open={gapOddsOpen || awaitingFirstCard}
+            revealed={revealed}
+            sigmaText={priorSigmaText}
+            trueYears={revealed ? state.played.map((card) => card.year) : null}
+            yearText={priorYearText}
+          />
+        ) : null}
+        <div
+          className={classNames(styles.top, {
+            [styles.topGameOver]: showGameOverSummary,
+            [styles.topWithOdds]: gapOddsExpanded,
+          })}
+        >
+          <div className={styles.statusArea}>
+            <AnimatePresence mode="wait">
+              {statusScene === "lives" ? (
+                <motion.div
+                  key="lives"
+                  animate={{ opacity: gameOverPhase === "hud-exit" ? 0 : 1 }}
+                  className={styles.statusLayer}
+                  exit={{ opacity: 0 }}
+                  initial={false}
+                  transition={{ duration: 0.28, ease: "easeOut" }}
+                >
+                  <Lives lives={state.lives} />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="game-over"
+                  animate={{ opacity: 1 }}
+                  className={styles.statusLayer}
+                  exit={{ opacity: 0 }}
+                  initial={restoredCompletedGame ? false : { opacity: 0 }}
+                  transition={{ duration: 0.28, ease: "easeOut" }}
+                >
+                  <GameOver
+                    showImmediately={restoredCompletedGame}
+                    dailyDateKey={dailyDateKey}
+                    difficulty={difficulty}
+                    gameMode={gameMode}
+                    highscore={highscore}
+                    played={state.played}
+                    resetGame={resetGame}
+                    routePath={routePath}
+                    score={score}
+                    selectionRoute={selectionRoute}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+          {deckVisible && renderedDeckState ? (
+            <NextItemList
+              deckAnchorRef={deckAnchorRef}
+              deckState={renderedDeckState.deckState}
+              next={openingDealInFlight ? null : renderedDeckState.next}
+              onDeckAnchorChange={handleDeckAnchorChange}
+              onCardDragMove={(point, rect) => {
+                if (rect) {
+                  const nextDragCentreX = rect.left + rect.width / 2;
+                  const lastDragCentreX = lastDragCentreXRef.current;
 
-                if (lastDragCentreX !== null) {
-                  const deltaX = nextDragCentreX - lastDragCentreX;
+                  if (lastDragCentreX !== null) {
+                    const deltaX = nextDragCentreX - lastDragCentreX;
 
-                  if (deltaX > 0.5) {
-                    dragDirectionRef.current = 1;
-                  } else if (deltaX < -0.5) {
-                    dragDirectionRef.current = -1;
+                    if (deltaX > 0.5) {
+                      dragDirectionRef.current = 1;
+                    } else if (deltaX < -0.5) {
+                      dragDirectionRef.current = -1;
+                    }
                   }
+
+                  lastDragCentreXRef.current = nextDragCentreX;
                 }
 
-                lastDragCentreXRef.current = nextDragCentreX;
+                maybeAutoScrollDuringDrag(point, rect);
+                updatePreviewIndex(getProjectedDropIndex(point, rect));
+              }}
+              onCardDragStart={onCardDragStart}
+              onCardDrop={onCardDrop}
+              reserve={renderedDeckState.reserve}
+              visible={deckShown}
+            />
+          ) : null}
+        </div>
+        <motion.div
+          id="bottom"
+          ref={bottomRef}
+          layoutScroll={timelineLayoutAnimationsEnabled}
+          className={classNames(styles.bottom, {
+            [styles.bottomWithOdds]: gapOddsExpanded,
+          })}
+        >
+          <PlayedItemList
+            hiddenCardId={hiddenPlayedCardId}
+            isDragging={isDragging}
+            items={state.played}
+            layoutAnimationsEnabled={timelineLayoutAnimationsEnabled}
+            onOpeningAnchorChange={handleOpeningAnchorChange}
+            openingAnchorRef={openingAnchorRef}
+            previewIndex={previewIndex}
+          />
+        </motion.div>
+        {openingDeal?.card ? (
+          <DealAnimationLayer
+            card={openingDeal.card}
+            from={openingDeal.from}
+            to={openingDeal.to}
+          />
+        ) : null}
+        {placementAnimation ? (
+          <PlacementAnimationLayer
+            boardRef={boardRef}
+            flight={placementAnimation}
+            onComplete={() => {
+              if (pendingResolvedState) {
+                if (pendingResolvedState.lives <= 0) {
+                  setFrozenDeckState({
+                    deckState,
+                    next: pendingResolvedState.next,
+                    reserve: pendingResolvedState.nextButOne,
+                  });
+                  setGameOverPhase("linger");
+                }
+                setState(pendingResolvedState);
+                setPendingResolvedState(null);
               }
-
-              maybeAutoScrollDuringDrag(point, rect);
-              updatePreviewIndex(getProjectedDropIndex(point, rect));
+              setHiddenPlayedCardId(null);
+              setPlacementAnimation(null);
             }}
-            onCardDragStart={onCardDragStart}
-            onCardDrop={onCardDrop}
-            reserve={renderedDeckState.reserve}
-            visible={deckShown}
+            scrollContainerRef={bottomRef}
           />
         ) : null}
       </div>
-      <motion.div
-        id="bottom"
-        ref={bottomRef}
-        layoutScroll={timelineLayoutAnimationsEnabled}
-        className={classNames(styles.bottom, {
-          [styles.bottomWithOdds]: gapOddsExpanded,
-        })}
-      >
-        <PlayedItemList
-          hiddenCardId={hiddenPlayedCardId}
-          isDragging={isDragging}
-          items={state.played}
-          layoutAnimationsEnabled={timelineLayoutAnimationsEnabled}
-          onOpeningAnchorChange={handleOpeningAnchorChange}
-          openingAnchorRef={openingAnchorRef}
-          previewIndex={previewIndex}
-        />
-      </motion.div>
-      {openingDeal?.card ? (
-        <DealAnimationLayer
-          card={openingDeal.card}
-          from={openingDeal.from}
-          to={openingDeal.to}
-        />
-      ) : null}
-      {placementAnimation ? (
-        <PlacementAnimationLayer
-          boardRef={boardRef}
-          flight={placementAnimation}
-          onComplete={() => {
-            if (pendingResolvedState) {
-              if (pendingResolvedState.lives <= 0) {
-                setFrozenDeckState({
-                  deckState,
-                  next: pendingResolvedState.next,
-                  reserve: pendingResolvedState.nextButOne,
-                });
-                setGameOverPhase("linger");
-              }
-              setState(pendingResolvedState);
-              setPendingResolvedState(null);
-            }
-            setHiddenPlayedCardId(null);
-            setPlacementAnimation(null);
-          }}
-          scrollContainerRef={bottomRef}
-        />
-      ) : null}
-    </div>
+    </HiddenDatesContext.Provider>
   );
 }

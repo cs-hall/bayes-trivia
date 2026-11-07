@@ -50,7 +50,9 @@ export const toggle = style({
   color: vars.color.text,
   cursor: "pointer",
   font: "inherit",
+  fontSize: vars.fontSize.xs,
   padding: `${vars.space.hairline} ${vars.space.sm}`,
+  whiteSpace: "nowrap",
 });
 
 export const collapsedToggle = style([
@@ -80,8 +82,8 @@ export const input = style({
   padding: `${vars.space.hairline} ${vars.space.xs}`,
 });
 
-export const yearInput = style([input, { width: "6.5rem" }]);
-export const sigmaInput = style([input, { width: "4.5rem" }]);
+export const yearInput = style([input, { width: "5.75rem" }]);
+export const sigmaInput = style([input, { width: "3.75rem" }]);
 
 export const muted = style({
   color: vars.color.textMuted,
@@ -137,4 +139,34 @@ export const svg = style({
   display: "block",
   overflow: "visible",
   position: "relative",
+});
+
+export const headerActions = style({
+  display: "flex",
+  gap: vars.space.xs,
+  marginLeft: "auto",
+});
+
+export const primaryButton = style({
+  background: vars.color.accent,
+  border: "none",
+  borderRadius: vars.radius.pill,
+  color: vars.color.accentText,
+  cursor: "pointer",
+  font: "inherit",
+  fontWeight: vars.fontWeight.semibold,
+  marginLeft: "auto",
+  padding: `${vars.space.xxs} ${vars.space.md}`,
+  selectors: {
+    "&:disabled": {
+      cursor: "default",
+      opacity: 0.35,
+    },
+  },
+});
+
+export const nudge = style({
+  color: vars.color.danger,
+  fontSize: vars.fontSize.xs,
+  fontWeight: vars.fontWeight.semibold,
 });

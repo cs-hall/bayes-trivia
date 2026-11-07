@@ -198,6 +198,11 @@ export const datePill = style({
   textWrap: "nowrap",
 });
 
+export const hiddenDatePill = style({
+  letterSpacing: "0.02em",
+  padding: `0 ${vars.space.xs}`,
+});
+
 export const correct = style({
   vars: {
     [datePillBorderVar]: vars.color.statusCorrectBorder,
