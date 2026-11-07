@@ -16,6 +16,7 @@ import { PreparedCard } from "../types/game";
 import { GameMode, SelectionRoute } from "../types/routes";
 import DealAnimationLayer from "./deal-animation-layer";
 import GameOver from "./game-over";
+import GapOddsPanel from "./gap-odds-panel";
 import Lives from "./lives";
 import NextItemList from "./next-item-list";
 import PlacementAnimationLayer from "./placement-animation-layer";
@@ -654,11 +655,60 @@ export default function Board(props: Props) {
     }
   }, [score, highscore, updateHighscore]);
 
+  const playedYears = React.useMemo(
+    () => state.played.map((card) => card.year),
+    [state.played],
+  );
+  const latestYear = React.useMemo(() => {
+    let latest: null | { index: number; year: number } = null;
+    state.played.forEach((card, index) => {
+      const placement = card.played.placementIndex ?? index;
+      if (latest === null || placement > latest.index) {
+        latest = { index: placement, year: card.year };
+      }
+    });
+    return latest === null ? null : (latest as { year: number }).year;
+  }, [state.played]);
+  const [gapOddsOpen, setGapOddsOpen] = React.useState(true);
+  React.useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("gap-odds-panel-open");
+      if (stored !== null) setGapOddsOpen(stored === "1");
+    } catch {
+      // storage unavailable: keep default
+    }
+  }, []);
+  const handleGapOddsOpenChange = React.useCallback((open: boolean) => {
+    setGapOddsOpen(open);
+    try {
+      window.localStorage.setItem("gap-odds-panel-open", open ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, []);
+  const showGapOdds = showLives && playedYears.length > 0;
+  const gapOddsExpanded = showGapOdds && gapOddsOpen;
+
   return (
-    <div ref={boardRef} className={styles.wrapper}>
+    <div
+      ref={boardRef}
+      className={classNames(styles.wrapper, {
+        [styles.wrapperWithOdds]: gapOddsExpanded,
+      })}
+    >
+      {showGapOdds ? (
+        <GapOddsPanel
+          dragGap={isDragging ? previewIndex : null}
+          latestYear={latestYear}
+          onOpenChange={handleGapOddsOpenChange}
+          open={gapOddsOpen}
+          years={playedYears}
+        />
+      ) : null}
       <div
         className={classNames(styles.top, {
           [styles.topGameOver]: showGameOverSummary,
+          [styles.topWithOdds]: gapOddsExpanded,
         })}
       >
         <div className={styles.statusArea}>
@@ -737,7 +787,9 @@ export default function Board(props: Props) {
         id="bottom"
         ref={bottomRef}
         layoutScroll={timelineLayoutAnimationsEnabled}
-        className={styles.bottom}
+        className={classNames(styles.bottom, {
+          [styles.bottomWithOdds]: gapOddsExpanded,
+        })}
       >
         <PlayedItemList
           hiddenCardId={hiddenPlayedCardId}
