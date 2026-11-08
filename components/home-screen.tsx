@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { withBasePath } from "../lib/base-path";
 import ButtonLink from "./button-link";
 import PageShell from "./page-shell";
 import SiteFooter from "./site-footer";
@@ -28,7 +29,7 @@ export default function HomeScreen() {
                   aria-hidden="true"
                   className={styles.gameIcon}
                   height={20}
-                  src="/timeframe-favicon.svg"
+                  src={withBasePath("/timeframe-favicon.svg")}
                   width={20}
                 />
                 <span>Try Timeframe, my new daily art game.</span>
@@ -44,7 +45,7 @@ export default function HomeScreen() {
                   aria-hidden="true"
                   className={styles.gameIcon}
                   height={20}
-                  src="/pinstinct-favicon.svg"
+                  src={withBasePath("/pinstinct-favicon.svg")}
                   width={20}
                 />
                 <span>Try Pinstinct, my daily map game.</span>
