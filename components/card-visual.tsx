@@ -1,6 +1,7 @@
 import classNames from "classnames";
 import { motion, Transition } from "motion/react";
 import React, { Fragment } from "react";
+import { useHiddenDates } from "../lib/hidden-dates-context";
 import { createWikimediaImageCandidates } from "../lib/image";
 import { useCardImage } from "../lib/use-card-image";
 import { useCardTheme } from "../lib/use-card-theme";
@@ -63,8 +64,13 @@ export default function CardVisual(props: Props) {
   );
   const { imageSrc } = useCardImage(imageCandidates);
   const cardThemeStyle = useCardTheme(item.deckThemeHue);
-  const yearLabel =
-    item.year < 0 ? `${Math.abs(item.year)} BCE` : String(item.year);
+  const hiddenDates = useHiddenDates();
+  const datesHidden = !hiddenDates.revealed;
+  const yearLabel = datesHidden
+    ? (hiddenDates.labels[item.id] ?? "?")
+    : item.year < 0
+      ? `${Math.abs(item.year)} BCE`
+      : String(item.year);
   const effectiveAnimateTransform = animateTransform ?? {
     rotateY: flipped ? 180 : 0,
   };
@@ -176,6 +182,7 @@ export default function CardVisual(props: Props) {
                 y: revealDatePill ? 0 : 6,
               }}
               className={classNames(styles.datePill, {
+                [styles.hiddenDatePill]: datesHidden,
                 [styles.correct]: item.played.correct,
                 [styles.incorrect]: !item.played.correct,
               })}

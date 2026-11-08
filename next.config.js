@@ -9,6 +9,8 @@ const nextConfig = {
     unoptimized: true,
   },
   output: "export",
+  // GitHub Pages serves the site from /<repo>; the deploy workflow sets this.
+  basePath: process.env.NEXT_PUBLIC_BASE_PATH || "",
 
   // Optional: Change links `/me` -> `/me/` and emit `/me.html` -> `/me/index.html`
   // trailingSlash: true,

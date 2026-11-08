@@ -22,6 +22,8 @@ export type PlayedCard = Card &
       correct: boolean;
       justPlaced?: boolean;
       placementIndex?: number;
+      /** The player's prior for this card's year (hidden-date mode). */
+      prior?: { mu: number; sigma: number };
       showDate: boolean;
     };
   };

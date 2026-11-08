@@ -9,7 +9,7 @@ export default function SiteHero(props: Props) {
 
   return (
     <div className={ui.heroStack}>
-      <h1 className={ui.heroWordmark}>Wikitrivia</h1>
+      <h1 className={ui.heroWordmark}>Bayes-trivia</h1>
       <p className={ui.heroTagline}>{subtitle}</p>
     </div>
   );

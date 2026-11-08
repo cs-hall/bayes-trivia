@@ -15,13 +15,13 @@ test("daily share text matches the new compact format", () => {
   assert.equal(
     shareText,
     [
-      "#wikitrivia / Daily for Mar 23 2026",
+      "#bayestrivia / Daily for Mar 23 2026",
       "",
       "🟩🟥🟩🟩🟩🟥🟩🟩",
       "",
       "Score / 6 / Bronze",
       "",
-      "https://wikitrivia.tomjwatson.com/daily",
+      "https://cs-hall.github.io/daily",
     ].join("\n"),
   );
 });
@@ -45,14 +45,14 @@ test("free play share text includes category, difficulty, score, and best", () =
   assert.equal(
     shareText,
     [
-      "#wikitrivia / History / Wars / Normal",
+      "#bayestrivia / History / Wars / Normal",
       "",
       "🟩🟥🟩🟩🟩🟥🟩🟩",
       "",
       "Score / 6 / Bronze",
       "Best / 25 / Gold",
       "",
-      "https://wikitrivia.tomjwatson.com/play/history/wars",
+      "https://cs-hall.github.io/play/history/wars",
     ].join("\n"),
   );
 });

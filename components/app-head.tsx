@@ -1,53 +1,63 @@
 import Head from "next/head";
+import { withBasePath } from "../lib/base-path";
 
 interface Props {
   title?: string;
 }
 
 export default function AppHead(props: Props) {
-  const { title = "Wikitrivia" } = props;
+  const { title = "Bayes-trivia" } = props;
 
   return (
     <Head>
       <title>{title}</title>
       <link
         rel="preload"
-        href="/fonts/inter-latin.woff2"
+        href={withBasePath("/fonts/inter-latin.woff2")}
         as="font"
         type="font/woff2"
         crossOrigin="anonymous"
       />
       <link
         rel="preload"
-        href="/fonts/fraunces-latin.woff2"
+        href={withBasePath("/fonts/fraunces-latin.woff2")}
         as="font"
         type="font/woff2"
         crossOrigin="anonymous"
       />
-      <link rel="icon" href="/favicon.svg" sizes="any" type="image/svg+xml" />
       <link
         rel="icon"
-        href="/favicon-light.png"
+        href={withBasePath("/favicon.svg")}
+        sizes="any"
+        type="image/svg+xml"
+      />
+      <link
+        rel="icon"
+        href={withBasePath("/favicon-light.png")}
         media="(prefers-color-scheme: light)"
         type="image/png"
       />
       <link
         rel="icon"
-        href="/favicon-dark.png"
+        href={withBasePath("/favicon-dark.png")}
         media="(prefers-color-scheme: dark)"
         type="image/png"
       />
-      <link rel="icon" href="/favicon-light.png" type="image/png" />
+      <link
+        rel="icon"
+        href={withBasePath("/favicon-light.png")}
+        type="image/png"
+      />
       <link
         rel="apple-touch-icon"
-        href="/apple-touch-icon.png"
+        href={withBasePath("/apple-touch-icon.png")}
         sizes="180x180"
       />
-      <link rel="manifest" href="/manifest.webmanifest" />
-      <meta name="application-name" content="Wikitrivia" />
+      <link rel="manifest" href={withBasePath("/manifest.webmanifest")} />
+      <meta name="application-name" content="Bayes-trivia" />
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-      <meta name="apple-mobile-web-app-title" content="Wikitrivia" />
+      <meta name="apple-mobile-web-app-title" content="Bayes-trivia" />
       <meta name="mobile-web-app-capable" content="yes" />
       <meta name="theme-color" content="#f8f8f8" />
     </Head>

@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { useHiddenDates } from "../lib/hidden-dates-context";
 import { PlayedCard } from "../types/cards";
 import { PreparedCard } from "../types/game";
 import CardVisual from "./card-visual";
@@ -22,7 +23,9 @@ export default function ItemCard(props: Props) {
     surface = "timeline",
   } = props;
 
-  const flipped = item.id === flippedId;
+  const { revealed } = useHiddenDates();
+  // Card backs carry the Wikipedia blurb, which often gives the year away.
+  const flipped = revealed && item.id === flippedId;
   const isJustPlacedCard = "played" in item && item.played.justPlaced === true;
 
   return (
@@ -39,7 +42,7 @@ export default function ItemCard(props: Props) {
         }
         item={item}
         onClick={() => {
-          if ("played" in item && setFlippedId) {
+          if (revealed && "played" in item && setFlippedId) {
             setFlippedId(flipped ? null : item.id);
           }
         }}

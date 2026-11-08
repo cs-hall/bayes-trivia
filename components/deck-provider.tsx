@@ -1,4 +1,5 @@
 import React from "react";
+import { withBasePath } from "../lib/base-path";
 import { createDeckNodeMap } from "../lib/deck-tree";
 import { Card } from "../types/cards";
 import { DeckNode } from "../types/decks";
@@ -33,7 +34,7 @@ async function fetchDeckTree(): Promise<DeckNode> {
   }
 
   if (!deckTreePromise) {
-    deckTreePromise = fetchJson<DeckNode>("/decks/index.json")
+    deckTreePromise = fetchJson<DeckNode>(withBasePath("/decks/index.json"))
       .then((response) => {
         cachedDeckTree = response;
         return response;
@@ -58,7 +59,7 @@ async function fetchDeck(deckId: string): Promise<Card[]> {
     return existingPromise;
   }
 
-  const nextPromise = fetchJson<Card[]>(`/decks/${deckId}.json`)
+  const nextPromise = fetchJson<Card[]>(withBasePath(`/decks/${deckId}.json`))
     .then((response) => {
       const loadedDeck = response as Card[];
       cachedDecks.set(deckId, loadedDeck);

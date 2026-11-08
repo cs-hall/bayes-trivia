@@ -52,3 +52,31 @@ export const bottom = style({
   position: "relative",
   width: "100%",
 });
+
+// Gap-odds panel open: let top/bottom share the remaining height, and on
+// shorter screens shrink the cards so deck, timeline and panel all fit.
+const shortScreen = "screen and (max-height: 62rem)";
+
+export const wrapperWithOdds = style({
+  "@media": {
+    [shortScreen]: {
+      vars: {
+        [vars.size.cardHeight]: "9.25rem",
+        [vars.size.cardWidth]: "7rem",
+        [vars.size.deckStackWidth]: "8rem",
+        [vars.size.deckWidth]: "10rem",
+      },
+    },
+  },
+});
+
+export const topWithOdds = style({
+  flex: "1 1 0",
+  gap: vars.space.sm,
+  paddingTop: vars.space.sm,
+});
+
+export const bottomWithOdds = style({
+  flex: "1 1 0",
+  paddingTop: vars.space.xs,
+});

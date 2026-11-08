@@ -1,9 +1,10 @@
 import { PlayedCard } from "../types/cards";
 import { GameDifficulty } from "../types/game";
 import { GameMode, SelectionRoute } from "../types/routes";
+import { withBasePath } from "./base-path";
 import { getSelectionRouteShareLabel } from "./categories";
-const PRODUCTION_ORIGIN = "https://wikitrivia.tomjwatson.com";
-const SHARE_BRAND_LABEL = "#wikitrivia";
+const PRODUCTION_ORIGIN = "https://cs-hall.github.io";
+const SHARE_BRAND_LABEL = "#bayestrivia";
 const SHARE_RESULT_CORRECT = "🟩";
 const SHARE_RESULT_INCORRECT = "🟥";
 
@@ -35,7 +36,7 @@ function getShareOrigin(): string {
 }
 
 export function buildShareUrl(path: string): string {
-  return `${getShareOrigin()}${path}`;
+  return `${getShareOrigin()}${withBasePath(path)}`;
 }
 
 export function getShareResults(played: PlayedCard[]): boolean[] {
