@@ -45,38 +45,21 @@ export const actions = style({
   width: "100%",
 });
 
-/**
- * The other games, stacked. There are two now, so they are a group rather than
- * a one-off — and the same chip either way: they are alternatives to each
- * other, and ranking them by styling one louder would be saying something
- * neither of them means.
- */
-export const otherGames = style({
+/** A prominent card linking to the game this one is forked from. */
+export const originalLink = style({
   alignItems: "center",
-  display: "flex",
-  flexDirection: "column",
-  gap: vars.space.md,
-  width: "100%",
-});
-
-export const gameLink = style({
-  alignItems: "center",
-  alignSelf: "center",
   background: vars.color.medalGoldFill,
   border: `${vars.size.borderWidth} solid ${vars.color.medalGoldBorder}`,
   borderRadius: vars.radius.lg,
   color: vars.color.medalGoldText,
-  display: "inline-flex",
-  fontSize: vars.fontSize.base,
-  fontWeight: vars.fontWeight.medium,
-  gap: vars.space.sm,
-  lineHeight: vars.lineHeight.body,
-  minHeight: vars.size.chipHeight,
-  padding: `${vars.space.xs} ${vars.space.lg}`,
+  display: "flex",
+  flexDirection: "column",
+  gap: vars.space.hairline,
+  padding: `${vars.space.md} ${vars.space.lg}`,
   selectors: {
     "&:hover": {
       background: vars.color.medalGoldFill,
-      borderColor: vars.color.medalGoldBorder,
+      borderColor: vars.color.medalGoldText,
       color: vars.color.medalGoldText,
     },
     "&:focus-visible": {
@@ -85,17 +68,35 @@ export const gameLink = style({
   },
   textAlign: "center",
   textDecoration: "none",
+  width: "100%",
 });
 
-export const gameIcon = style({
-  flex: "0 0 auto",
-  height: vars.space.xl,
-  width: vars.space.xl,
+export const originalKicker = style({
+  fontSize: vars.fontSize.xs,
+  fontWeight: vars.fontWeight.semibold,
+  letterSpacing: "0.08em",
+  opacity: 0.8,
+  textTransform: "uppercase",
+});
+
+export const originalName = style({
+  fontFamily: vars.font.display,
+  fontSize: vars.fontSize.xl,
+  fontWeight: vars.fontWeight.bold,
+  lineHeight: vars.lineHeight.tight,
+});
+
+export const originalMeta = style({
+  fontSize: vars.fontSize.sm,
+  fontWeight: vars.fontWeight.medium,
 });
 
 export const about = style({});
 export const footer = style({
   bottom: 0,
+  color: vars.color.textMuted,
+  fontSize: vars.fontSize.sm,
+  margin: 0,
   left: "50%",
   marginTop: 0,
   paddingBottom: `calc(${vars.space.lg} + env(safe-area-inset-bottom, 0px))`,
@@ -113,5 +114,3 @@ export const footer = style({
     },
   },
 });
-
-export const githubButtonSlot = style({});

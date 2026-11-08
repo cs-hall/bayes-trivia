@@ -30,6 +30,7 @@ import Lives from "./lives";
 import NextItemList from "./next-item-list";
 import PlacementAnimationLayer from "./placement-animation-layer";
 import PlayedItemList from "./played-item-list";
+import TimelineLeaderLines from "./timeline-leader-lines";
 import * as styles from "../styles/board.css";
 
 const DEAL_REVEAL_DELAY_MS = 120;
@@ -796,6 +797,18 @@ export default function Board(props: Props) {
           [styles.wrapperWithOdds]: gapOddsExpanded,
         })}
       >
+        {showPanel && gapOddsExpanded && hidden ? (
+          <TimelineLeaderLines
+            ids={state.played.map((card) => card.id)}
+            latestIndex={latestIndex}
+            medians={
+              revealed
+                ? state.played.map((card) => card.year)
+                : hidden.board.posteriors.map((p) => p.median)
+            }
+            rootRef={boardRef}
+          />
+        ) : null}
         {showPanel ? (
           <BayesPanel
             awaitingFirstCard={awaitingFirstCard}
