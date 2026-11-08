@@ -897,6 +897,7 @@ export default function Board(props: Props) {
               onCardDragStart={onCardDragStart}
               onCardDrop={onCardDrop}
               reserve={renderedDeckState.reserve}
+              revealTop={awaitingFirstCard}
               visible={deckShown}
             />
           ) : null}
