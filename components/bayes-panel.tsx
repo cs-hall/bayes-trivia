@@ -358,7 +358,7 @@ export default function BayesPanel(props: Props) {
 
   let posteriorLine: React.ReactNode = (
     <span className={styles.muted}>
-      Posterior: drag over a gap, or tap the curves / map
+      Best guess: drag over a gap, or tap the curves / map
     </span>
   );
   if (revealed && board && trueYears) {
@@ -403,7 +403,7 @@ export default function BayesPanel(props: Props) {
     if (summary.muRange === null || summary.maxSigma === null) {
       posteriorLine = (
         <>
-          Posterior · {source} {label}: never the best pick for ±{" "}
+          Best guess · {source} {label}: never the best pick for ±{" "}
           {MAP_SIGMA_MIN}–{MAP_SIGMA_MAX} yrs
         </>
       );
@@ -415,7 +415,7 @@ export default function BayesPanel(props: Props) {
           : `± up to ${Math.round(summary.maxSigma)}`;
       posteriorLine = (
         <>
-          Posterior · {source} {label}: right call for priors{" "}
+          Best guess · {source} {label}: right call for priors{" "}
           {formatYear(summary.muRange[0])} to {formatYear(summary.muRange[1])},{" "}
           {sigmaPart} yrs · lands here{" "}
           <span className={styles.strong}>
@@ -590,7 +590,7 @@ export default function BayesPanel(props: Props) {
           />
           {width > 0 ? (
             <svg
-              aria-label="Top: card posteriors, your prior and the posterior for the selected gap. Bottom: best gap for each prior year (across) and ± (up)."
+              aria-label="Top: card posteriors, your prior and the best guess for the selected gap. Bottom: best gap for each prior year (across) and ± (up)."
               className={styles.svg}
               height={boxHeight}
               onPointerDown={handlePointer}

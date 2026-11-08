@@ -1,6 +1,6 @@
 # Bayes-trivia
 
-Bayes-trivia is a fork of [Wikitrivia](https://github.com/tom-james-watson/wikitrivia) by Tom James Watson (MIT licence). It adds a gap-odds panel: enter a prior (year ± years) to see the best gap, and see the posterior over the card's year implied by choosing the gap you're dragging over.
+Bayes-trivia is a fork of [Wikitrivia](https://github.com/tom-james-watson/wikitrivia) by Tom James Watson (MIT licence). Dates stay hidden: you give each card a prior (year ± years), the game only tells you the order, and every card's posterior is updated from that order after each placement. A panel shows the best gap for your prior and the best guess for the card's year implied by choosing the gap you're dragging over.
 
 ## Original README
 

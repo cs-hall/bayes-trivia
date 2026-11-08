@@ -117,3 +117,22 @@ test("single card: two gaps split by the card's posterior", () => {
 function close(a: number, b: number, eps: number) {
   assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
 }
+
+test("placing a new card updates the existing cards' posteriors", () => {
+  // Two vague cards; a confident card lands between them.
+  const before = buildHiddenBoard([
+    { mu: 1500, sigma: 300 },
+    { mu: 1700, sigma: 300 },
+  ]);
+  const after = buildHiddenBoard([
+    { mu: 1500, sigma: 300 },
+    { mu: 1600, sigma: 10 },
+    { mu: 1700, sigma: 300 },
+  ]);
+  const [a0, b0] = before.posteriors;
+  const a1 = after.posteriors[0];
+  const b1 = after.posteriors[2];
+  // Left card must now be before ~1600, right card after: both shift and narrow.
+  assert.ok(a1.mean < a0.mean && a1.sd < a0.sd, `${a0.sd} -> ${a1.sd}`);
+  assert.ok(b1.mean > b0.mean && b1.sd < b0.sd, `${b0.sd} -> ${b1.sd}`);
+});
