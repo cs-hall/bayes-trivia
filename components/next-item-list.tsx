@@ -33,6 +33,8 @@ interface NextItemListProps {
     rect: DOMRect | null,
   ) => boolean;
   reserve: PreparedCard | null;
+  /** Show the hidden top card face up (the first card needs a prior). */
+  revealTop?: boolean;
   visible: boolean;
 }
 
@@ -98,6 +100,7 @@ export default function NextItemList(props: NextItemListProps) {
     onCardDragStart,
     onCardDrop,
     reserve,
+    revealTop = false,
     visible,
   } = props;
   const renderedNext = next;
@@ -144,14 +147,22 @@ export default function NextItemList(props: NextItemListProps) {
                   ref={handleDeckAnchorRef}
                   className={styles.topCardAnchor}
                 >
-                  <CardVisual
-                    backVariant="deck"
-                    flipped
-                    item={renderedNext}
-                    loadImage={false}
-                    surface="deck"
-                    style={topCardStyle}
-                  />
+                  {revealTop ? (
+                    <CardVisual
+                      item={renderedNext}
+                      surface="deck"
+                      style={topCardStyle}
+                    />
+                  ) : (
+                    <CardVisual
+                      backVariant="deck"
+                      flipped
+                      item={renderedNext}
+                      loadImage={false}
+                      surface="deck"
+                      style={topCardStyle}
+                    />
+                  )}
                 </div>
               ) : null}
               {renderedNext && deckState === "revealing" ? (

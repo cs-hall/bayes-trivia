@@ -57,17 +57,9 @@ export default function DealAnimationLayer(props: DealAnimationLayerProps) {
       }}
     >
       <CardVisual
-        animateTransform={
-          animationStarted
-            ? {
-                rotateY: 0,
-                y: 0,
-              }
-            : {
-                rotateY: 180,
-                y: 0,
-              }
-        }
+        // The first card is already face up (it needed a prior), so it
+        // travels to the timeline without flipping.
+        animateTransform={{ rotateY: 0, y: 0 }}
         backVariant="deck"
         flipped={false}
         initialTransform={false}
