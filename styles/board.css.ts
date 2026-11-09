@@ -78,5 +78,6 @@ export const topWithOdds = style({
 
 export const bottomWithOdds = style({
   flex: "1 1 0",
-  paddingTop: vars.space.xs,
+  // Room above the card row for the bent year axis and its labels.
+  paddingTop: "1.75rem",
 });

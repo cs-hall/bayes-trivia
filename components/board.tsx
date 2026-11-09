@@ -29,6 +29,7 @@ import { PreparedCard } from "../types/game";
 import { GameMode, SelectionRoute } from "../types/routes";
 import BayesPanel from "./bayes-panel";
 import DealAnimationLayer from "./deal-animation-layer";
+import FocusedCardOverlay from "./focused-card-overlay";
 import GameOver from "./game-over";
 import Lives from "./lives";
 import NextItemList from "./next-item-list";
@@ -759,6 +760,43 @@ export default function Board(props: Props) {
   }, [priorsKey, bounds]);
 
   const revealed = state.lives <= 0 || isDeckExhausted;
+  // Tapped card: enlarged above the row and highlighted on the Bayes curves.
+  const [focusedId, setFocusedId] = React.useState<null | string>(null);
+  const handleCardTap = React.useCallback((id: string) => {
+    setFocusedId((current) => (current === id ? null : id));
+  }, []);
+  const focusedIndex =
+    focusedId === null
+      ? null
+      : state.played.findIndex((card) => card.id === focusedId);
+  const focusedCard =
+    focusedIndex !== null && focusedIndex >= 0
+      ? state.played[focusedIndex]
+      : null;
+  // Close it when a drag starts or the timeline changes.
+  React.useEffect(() => {
+    if (isDragging) setFocusedId(null);
+  }, [isDragging]);
+  React.useEffect(() => {
+    setFocusedId(null);
+  }, [state.played.length]);
+  // ...or on a tap anywhere other than a card.
+  React.useEffect(() => {
+    if (focusedId === null) return;
+    const handler = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (
+        target?.closest("[data-card-id]") ||
+        target?.closest("[data-focused-card-overlay]")
+      ) {
+        return;
+      }
+      setFocusedId(null);
+    };
+    document.addEventListener("pointerdown", handler, true);
+    return () => document.removeEventListener("pointerdown", handler, true);
+  }, [focusedId]);
+
   const hiddenDatesValue = React.useMemo(() => {
     const labels: Record<string, string> = {};
     if (hidden) {
@@ -769,8 +807,8 @@ export default function Board(props: Props) {
         }
       });
     }
-    return { labels, revealed };
-  }, [hidden, revealed, state.played]);
+    return { focusedId, labels, onCardTap: handleCardTap, revealed };
+  }, [focusedId, handleCardTap, hidden, revealed, state.played]);
 
   const handleReveal = React.useCallback(() => {
     if (isPlacementSettling || state.lives <= 0) return;
@@ -814,6 +852,9 @@ export default function Board(props: Props) {
       >
         {showPanel && gapOddsExpanded && hidden ? (
           <TimelineLeaderLines
+            focusedIndex={
+              focusedIndex !== null && focusedIndex >= 0 ? focusedIndex : null
+            }
             ids={state.played.map((card) => card.id)}
             latestIndex={latestIndex}
             medians={
@@ -821,6 +862,13 @@ export default function Board(props: Props) {
                 ? state.played.map((card) => card.year)
                 : hidden.board.posteriors.map((p) => p.median)
             }
+            rootRef={boardRef}
+          />
+        ) : null}
+        {focusedCard && !revealed ? (
+          <FocusedCardOverlay
+            card={focusedCard}
+            onClose={() => setFocusedId(null)}
             rootRef={boardRef}
           />
         ) : null}
@@ -833,6 +881,10 @@ export default function Board(props: Props) {
               !revealed && !isPlacementSettling && state.played.length > 0
             }
             dragGap={isDragging ? previewIndex : null}
+            focusedIndex={
+              focusedIndex !== null && focusedIndex >= 0 ? focusedIndex : null
+            }
+            focusedTitle={focusedCard?.title ?? null}
             latestIndex={latestIndex}
             nudge={priorNudge}
             onConfirmFirstCard={() => {
