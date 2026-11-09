@@ -21,6 +21,33 @@ export const review = style({
   width: "100%",
 });
 
+/** Collapsed: one compact line with the score and best. */
+export const reviewCollapsed = style([
+  review,
+  {
+    gap: 0,
+    padding: `${vars.space.xs} ${vars.space.md}`,
+  },
+]);
+
+export const headlineEnd = style({
+  alignItems: "center",
+  display: "flex",
+  gap: vars.space.sm,
+});
+
+export const collapseButton = style({
+  background: "transparent",
+  border: `${vars.size.borderWidth} solid ${vars.color.border}`,
+  borderRadius: vars.radius.pill,
+  color: vars.color.textMuted,
+  cursor: "pointer",
+  font: "inherit",
+  fontSize: vars.fontSize.sm,
+  padding: `${vars.space.hairline} ${vars.space.sm}`,
+  whiteSpace: "nowrap",
+});
+
 /** "Score 7" headline with the best score beside it. */
 export const headline = style({
   alignItems: "baseline",

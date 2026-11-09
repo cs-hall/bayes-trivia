@@ -110,6 +110,8 @@ function KnowsLine({ s }: { s: CalibrationSummary }) {
   );
 }
 
+const COLLAPSED_KEY = "bayes-trivia:review-collapsed";
+
 /**
  * Game-over review. The score (still the main result) is the block's title;
  * below it, a calibration funnel and metrics for this game or all games.
@@ -117,52 +119,89 @@ function KnowsLine({ s }: { s: CalibrationSummary }) {
 export default function CalibrationReview(props: Props) {
   const { history, highscore, records, score } = props;
   const [tab, setTab] = React.useState<"game" | "all">("game");
+  // Collapsed: just the score and best on one line (remembered).
+  const [collapsed, setCollapsed] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
+    } catch {
+      // storage unavailable: start expanded
+    }
+  }, []);
+  const toggleCollapsed = () => {
+    setCollapsed((value) => {
+      try {
+        localStorage.setItem(COLLAPSED_KEY, value ? "0" : "1");
+      } catch {
+        // ignore
+      }
+      return !value;
+    });
+  };
   const shown = tab === "game" ? records : history;
   const summary = React.useMemo(() => summariseCalibration(shown), [shown]);
 
   return (
-    <section aria-label="Game review" className={styles.review}>
+    <section
+      aria-label="Game review"
+      className={collapsed ? styles.reviewCollapsed : styles.review}
+    >
       <div className={styles.headline}>
         <Score score={score} title="Score" />
-        <span className={styles.best}>
-          Best <b>{highscore}</b>
+        <span className={styles.headlineEnd}>
+          <span className={styles.best}>
+            Best <b>{highscore}</b>
+          </span>
+          <button
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? "Show game review" : "Hide game review"}
+            className={styles.collapseButton}
+            onClick={toggleCollapsed}
+            type="button"
+          >
+            {collapsed ? "Review ▾" : "▴"}
+          </button>
         </span>
       </div>
-      <div className={styles.tabs} role="tablist">
-        <button
-          aria-selected={tab === "game"}
-          className={styles.tab}
-          onClick={() => setTab("game")}
-          role="tab"
-          type="button"
-        >
-          This game
-        </button>
-        <button
-          aria-selected={tab === "all"}
-          className={styles.tab}
-          onClick={() => setTab("all")}
-          role="tab"
-          type="button"
-        >
-          All games · {history.length} cards
-        </button>
-      </div>
-      {tab === "all" ? (
-        <div className={styles.muted}>
-          Every card you've set a prior for on this device
-        </div>
-      ) : null}
-      {summary.n === 0 ? (
-        <p className={styles.muted}>No cards with a prior yet.</p>
-      ) : (
+      {collapsed ? null : (
         <>
-          <CalibrationFunnel records={shown} />
-          <ul className={styles.metrics}>
-            <SpreadLine s={summary} />
-            <BiasLine s={summary} />
-            {tab === "all" ? <KnowsLine s={summary} /> : null}
-          </ul>
+          <div className={styles.tabs} role="tablist">
+            <button
+              aria-selected={tab === "game"}
+              className={styles.tab}
+              onClick={() => setTab("game")}
+              role="tab"
+              type="button"
+            >
+              This game
+            </button>
+            <button
+              aria-selected={tab === "all"}
+              className={styles.tab}
+              onClick={() => setTab("all")}
+              role="tab"
+              type="button"
+            >
+              All games · {history.length} cards
+            </button>
+          </div>
+          {tab === "all" ? (
+            <div className={styles.muted}>
+              Every card you've set a prior for on this device
+            </div>
+          ) : null}
+          {summary.n === 0 ? (
+            <p className={styles.muted}>No cards with a prior yet.</p>
+          ) : (
+            <>
+              <CalibrationFunnel records={shown} />
+              <ul className={styles.metrics}>
+                <SpreadLine s={summary} />
+                <BiasLine s={summary} />
+                {tab === "all" ? <KnowsLine s={summary} /> : null}
+              </ul>
+            </>
+          )}
         </>
       )}
     </section>
