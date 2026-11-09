@@ -662,6 +662,18 @@ export default function BayesPanel(props: Props) {
                 y1={CHART_HEIGHT}
                 y2={CHART_HEIGHT}
               />
+              {/* Where the card leader lines land: the year axis under the map
+                  (under the curves at the reveal, when the map is hidden). */}
+              <line
+                data-bayes-axis=""
+                data-hi={domain[1]}
+                data-lo={domain[0]}
+                stroke="none"
+                x1={MARGIN_LEFT}
+                x2={MARGIN_LEFT + plotWidth}
+                y1={revealed ? CHART_HEIGHT : MAP_TOP + MAP_HEIGHT}
+                y2={revealed ? CHART_HEIGHT : MAP_TOP + MAP_HEIGHT}
+              />
               {/* Card posteriors */}
               {cardCurves.map((curve, i) => (
                 <path

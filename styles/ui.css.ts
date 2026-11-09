@@ -448,34 +448,6 @@ export const surface = recipe({
   },
 });
 
-export const footerNotes = style([
-  atoms({
-    alignItems: "center",
-    display: "flex",
-    flexDirection: "column",
-    gap: "xs",
-    marginTop: "2xl",
-    textAlign: "center",
-    width: "full",
-  }),
-  {
-    color: vars.color.textMuted,
-    fontSize: vars.fontSize.sm,
-    lineHeight: vars.lineHeight.body,
-  },
-]);
-
-export const githubButtonSlot = style([
-  atoms({
-    alignItems: "center",
-    display: "flex",
-    justifyContent: "center",
-  }),
-  {
-    minHeight: vars.size.chipHeight,
-  },
-]);
-
 export const overlay = style({
   alignItems: "center",
   background: vars.color.overlay,
