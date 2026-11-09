@@ -6,6 +6,7 @@ import { GameDifficulty } from "../types/game";
 import { SelectionRoute } from "../types/routes";
 import DifficultySelector from "./difficulty-selector";
 import SelectorOptionGrid, { SelectorOption } from "./selector-option-grid";
+import YearRangeSelector from "./year-range-selector";
 import * as buttonStyles from "../styles/button.css";
 import * as styles from "../styles/free-play-selector.css";
 
@@ -73,6 +74,9 @@ function SelectorIntro(props: {
           />
         </div>
       ) : null}
+      <div className={styles.introControl}>
+        <YearRangeSelector />
+      </div>
       <div className={styles.introControl}>
         <button
           className={classNames(buttonStyles.button, buttonStyles.fullWidth)}

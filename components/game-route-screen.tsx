@@ -1,3 +1,4 @@
+import classNames from "classnames";
 import React from "react";
 import { getSelectionRoutePath } from "../lib/categories";
 import { DAILY_DIFFICULTY, getCurrentUtcDateKey } from "../lib/daily";
@@ -16,10 +17,16 @@ import {
   filterCardsBySelectionRoute,
   resolveSelectionDeck,
 } from "../lib/game-state";
+import { formatYear } from "../lib/gap-odds";
 import { loadHighscore, saveHighscore } from "../lib/highscore-storage";
 import { createSeededRandom } from "../lib/seeded-random";
 import { useBackConfirmation } from "../lib/use-back-confirmation";
 import { useFreePlayDifficulty } from "../lib/use-free-play-difficulty";
+import {
+  intersectYearRange,
+  useFreePlayYearRange,
+} from "../lib/use-free-play-year-range";
+import { Card } from "../types/cards";
 import { GameState } from "../types/game";
 import { GameMode, SelectionRoute } from "../types/routes";
 import Board from "./board";
@@ -29,7 +36,9 @@ import { useNavigationSource } from "./navigation-source-provider";
 import QuitGameModal from "./quit-game-modal";
 import RouteIntroScreen from "./route-intro-screen";
 import SiteHeader from "./site-header";
+import * as buttonStyles from "../styles/button.css";
 import * as styles from "../styles/game-route-screen.css";
+import * as rangeStyles from "../styles/year-range-selector.css";
 
 interface Props {
   hideHeader?: boolean;
@@ -84,6 +93,38 @@ function RouteLoadingFrame(props: { hideHeader: boolean }) {
   );
 }
 
+/**
+ * Fewest different years a year range must leave for a game to be dealt.
+ * The game never deals two cards from the same year, so it is years, not
+ * cards, that limit how long a game can run.
+ */
+const MIN_RANGE_YEARS = 15;
+
+function describeRange(min: number | null, max: number | null) {
+  if (min !== null && max !== null) {
+    return `${formatYear(min)}–${formatYear(max)}`;
+  }
+  if (min !== null) return `${formatYear(min)} or later`;
+  return `${formatYear(max ?? 0)} or earlier`;
+}
+
+function filterCardsByYearRange(
+  cardsByDeckId: ReadonlyMap<string, Card[]>,
+  min: number | null,
+  max: number | null,
+): Map<string, Card[]> {
+  const out = new Map<string, Card[]>();
+  for (const [deckId, cards] of cardsByDeckId) {
+    const kept = cards.filter(
+      (card) =>
+        (min === null || card.year >= min) &&
+        (max === null || card.year <= max),
+    );
+    if (kept.length > 0) out.set(deckId, kept);
+  }
+  return out;
+}
+
 export default function GameRouteScreen(props: Props) {
   const {
     hideHeader = false,
@@ -101,6 +142,16 @@ export default function GameRouteScreen(props: Props) {
   const [showRouteIntro, setShowRouteIntro] = React.useState(false);
   const [restoredFromSnapshot, setRestoredFromSnapshot] = React.useState(false);
   const freePlayDifficulty = useFreePlayDifficulty();
+  const freePlayYearRange = useFreePlayYearRange();
+  // Free play only: the player's optional range, intersected with the
+  // route's own era limits (if any).
+  const effectiveRange =
+    mode === "free-play"
+      ? intersectYearRange(freePlayYearRange.range, selectionRoute)
+      : null;
+  const rangeMin = effectiveRange?.min ?? null;
+  const rangeMax = effectiveRange?.max ?? null;
+  const [rangeError, setRangeError] = React.useState<null | string>(null);
   const navigationSource = useNavigationSource();
   const { deckNodes, loadDecks, rootDeckId } = useDecks();
 
@@ -264,8 +315,13 @@ export default function GameRouteScreen(props: Props) {
         return;
       }
 
+      if (mode === "free-play" && !freePlayYearRange.ready) {
+        return;
+      }
+
       setStateReady(false);
       setRestoredFromSnapshot(false);
+      setRangeError(null);
       const loadedDeckCards = await loadDecks(selectedLeafDeckIds);
       const selectedRootDeck = resolveSelectionDeck(
         deckNodes,
@@ -276,10 +332,35 @@ export default function GameRouteScreen(props: Props) {
       if (!selectedRootDeck) {
         return;
       }
-      const filteredCards = filterCardsBySelectionRoute(
+      let filteredCards = filterCardsBySelectionRoute(
         loadedDeckCards,
         mode === "daily" ? null : (selectionRoute ?? null),
       );
+
+      if (mode === "free-play" && (rangeMin !== null || rangeMax !== null)) {
+        filteredCards = filterCardsByYearRange(
+          filteredCards,
+          rangeMin,
+          rangeMax,
+        );
+        const years = new Set<number>();
+        for (const cards of filteredCards.values()) {
+          for (const card of cards) years.add(card.year);
+        }
+        if (years.size < MIN_RANGE_YEARS) {
+          if (!cancelled) {
+            setRangeError(
+              `This deck only has cards from ${years.size} different year${
+                years.size === 1 ? "" : "s"
+              } in ${describeRange(
+                rangeMin,
+                rangeMax,
+              )}, and each card needs its own year. Widen the year range or pick another deck.`,
+            );
+          }
+          return;
+        }
+      }
 
       if (mode === "daily") {
         const existingSnapshot = loadDailyGameSnapshot();
@@ -318,11 +399,26 @@ export default function GameRouteScreen(props: Props) {
         return;
       }
 
-      const nextState = await createStateWithRetry(
-        selectedRootDeck,
-        filteredCards,
-        difficulty,
-      );
+      let nextState: GameState;
+      try {
+        nextState = await createStateWithRetry(
+          selectedRootDeck,
+          filteredCards,
+          difficulty,
+        );
+      } catch {
+        if (!cancelled) {
+          setRangeError(
+            rangeMin !== null || rangeMax !== null
+              ? `Not enough ${difficulty} cards in ${describeRange(
+                  rangeMin,
+                  rangeMax,
+                )}. Try a wider range or another difficulty.`
+              : "Couldn't deal a game from this deck.",
+          );
+        }
+        return;
+      }
 
       if (!cancelled) {
         setRestoredFromSnapshot(false);
@@ -344,7 +440,10 @@ export default function GameRouteScreen(props: Props) {
     entryReady,
     fontsReady,
     loadDecks,
+    freePlayYearRange.ready,
     mode,
+    rangeMax,
+    rangeMin,
     rootDeckId,
     runNonce,
     selectedLeafDeckIds,
@@ -420,6 +519,28 @@ export default function GameRouteScreen(props: Props) {
         }
         showHeader={!hideHeader}
       />
+    );
+  }
+
+  if (rangeError) {
+    return (
+      <div className={styles.page}>
+        {hideHeader ? null : <SiteHeader />}
+        <div className={styles.boardFrame}>
+          <div className={rangeStyles.message}>
+            <p>{rangeError}</p>
+            <button
+              className={classNames(buttonStyles.button)}
+              // Back to the Start screen (or the deck menu), where the
+              // range can be changed.
+              onClick={resetGame}
+              type="button"
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 

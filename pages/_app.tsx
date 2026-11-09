@@ -8,6 +8,7 @@ import MenuFlowShell, {
 } from "../components/menu-flow-shell";
 import { NavigationSourceProvider } from "../components/navigation-source-provider";
 import { FreePlayDifficultyProvider } from "../lib/use-free-play-difficulty";
+import { FreePlayYearRangeProvider } from "../lib/use-free-play-year-range";
 import * as uiStyles from "../styles/ui.css";
 
 function getPageTransitionKey(pathname: string, asPath: string): string {
@@ -39,29 +40,31 @@ function App({ Component, pageProps }: AppProps) {
   return (
     <NavigationSourceProvider>
       <FreePlayDifficultyProvider>
-        <DeckProvider>
-          <div className={uiStyles.pageTransitionRoot}>
-            {useMenuFlowShell ? (
-              <MenuFlowShell />
-            ) : (
-              <AnimatePresence initial={false} mode="wait">
-                <motion.div
-                  key={pageTransitionKey}
-                  animate={{ opacity: 1 }}
-                  className={uiStyles.pageTransitionPane}
-                  exit={{ opacity: 0 }}
-                  initial={{ opacity: 0 }}
-                  transition={{
-                    duration: reduceMotion ? 0.12 : 0.22,
-                    ease: [0.22, 1, 0.36, 1],
-                  }}
-                >
-                  <Component {...pageProps} />
-                </motion.div>
-              </AnimatePresence>
-            )}
-          </div>
-        </DeckProvider>
+        <FreePlayYearRangeProvider>
+          <DeckProvider>
+            <div className={uiStyles.pageTransitionRoot}>
+              {useMenuFlowShell ? (
+                <MenuFlowShell />
+              ) : (
+                <AnimatePresence initial={false} mode="wait">
+                  <motion.div
+                    key={pageTransitionKey}
+                    animate={{ opacity: 1 }}
+                    className={uiStyles.pageTransitionPane}
+                    exit={{ opacity: 0 }}
+                    initial={{ opacity: 0 }}
+                    transition={{
+                      duration: reduceMotion ? 0.12 : 0.22,
+                      ease: [0.22, 1, 0.36, 1],
+                    }}
+                  >
+                    <Component {...pageProps} />
+                  </motion.div>
+                </AnimatePresence>
+              )}
+            </div>
+          </DeckProvider>
+        </FreePlayYearRangeProvider>
       </FreePlayDifficultyProvider>
     </NavigationSourceProvider>
   );

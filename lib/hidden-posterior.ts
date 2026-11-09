@@ -27,6 +27,27 @@ const MAP_COLS = 200;
 /** No card can be dated after the current year. */
 export const MAX_YEAR = new Date().getFullYear();
 
+/**
+ * Years every card is known to lie in (inclusive). Free play can restrict
+ * the deck to a range; the cap at the current year always applies.
+ */
+export interface YearBounds {
+  max: number;
+  min: number;
+}
+
+export const DEFAULT_BOUNDS: YearBounds = { max: MAX_YEAR, min: -Infinity };
+
+export function resolveBounds(
+  min: number | null | undefined,
+  max: number | null | undefined,
+): YearBounds {
+  return {
+    max: Math.min(MAX_YEAR, max ?? MAX_YEAR),
+    min: min ?? -Infinity,
+  };
+}
+
 export interface Prior {
   mu: number;
   sigma: number;
@@ -45,6 +66,7 @@ export interface CardPosterior {
 }
 
 export interface HiddenBoard {
+  bounds: YearBounds;
   /** Display domain for the timeline axis. */
   domain: [number, number];
   /** Grid of year bin centres. */
@@ -82,15 +104,31 @@ function binMass(
   step: number,
   prior: Prior,
   out: Float64Array,
+  bounds: YearBounds = DEFAULT_BOUNDS,
 ) {
   const half = step / 2;
   const s = Math.max(prior.sigma, PRIOR_SIGMA_MIN);
   let prev = normCdf((grid[0] - half - prior.mu) / s);
+  let total = 0;
+  let first = -1;
+  let last = -1;
   for (let j = 0; j < grid.length; j += 1) {
     const next = normCdf((grid[j] + half - prior.mu) / s);
-    // Years after MAX_YEAR are impossible.
-    out[j] = grid[j] - half >= MAX_YEAR + 0.5 ? 0 : Math.max(0, next - prev);
+    // Years outside the bounds are impossible.
+    const inside =
+      grid[j] + half > bounds.min - 0.5 && grid[j] - half < bounds.max + 0.5;
+    out[j] = inside ? Math.max(0, next - prev) : 0;
+    if (inside) {
+      if (first < 0) first = j;
+      last = j;
+    }
+    total += out[j];
     prev = next;
+  }
+  // A prior far outside the bounds has (numerically) no mass inside them:
+  // its truncated limit is the nearest allowed year.
+  if (!(total > 1e-300) && first >= 0) {
+    out[prior.mu < grid[first] ? first : last] = 1;
   }
 }
 
@@ -112,7 +150,10 @@ function quantile(mass: Float64Array, grid: Float64Array, q: number): number {
   return grid[grid.length - 1];
 }
 
-export function buildHiddenBoard(priors: Prior[]): HiddenBoard {
+export function buildHiddenBoard(
+  priors: Prior[],
+  bounds: YearBounds = DEFAULT_BOUNDS,
+): HiddenBoard {
   const n = priors.length;
   let lo = Infinity;
   let hi = -Infinity;
@@ -124,8 +165,13 @@ export function buildHiddenBoard(priors: Prior[]): HiddenBoard {
     lo = 0;
     hi = 1;
   }
-  hi = Math.min(hi, MAX_YEAR + 1);
-  lo = Math.min(lo, hi - 10);
+  hi = Math.min(hi, bounds.max + 1);
+  lo = Math.max(lo, bounds.min - 1);
+  if (!(hi - lo >= 10)) {
+    // Priors all outside the bounds: cover the bounds themselves.
+    lo = Number.isFinite(bounds.min) ? bounds.min - 1 : hi - 10;
+    hi = Math.max(hi, lo + 10);
+  }
   const step = Math.max(1, Math.ceil((hi - lo) / MAX_GRID));
   const start = Math.floor(lo) - step;
   const size = Math.ceil((hi - start) / step) + 2;
@@ -134,7 +180,7 @@ export function buildHiddenBoard(priors: Prior[]): HiddenBoard {
 
   const pMass = priors.map((p) => {
     const arr = new Float64Array(size);
-    binMass(grid, step, p, arr);
+    binMass(grid, step, p, arr, bounds);
     return arr;
   });
 
@@ -272,7 +318,11 @@ export function buildHiddenBoard(priors: Prior[]): HiddenBoard {
   const pad = Math.max((dHi - dLo) * 0.12, 40);
 
   return {
-    domain: [dLo - pad, Math.min(dHi + pad, MAX_YEAR + pad * 0.25)],
+    bounds,
+    domain: [
+      Math.max(dLo - pad, bounds.min - pad * 0.25),
+      Math.min(dHi + pad, bounds.max + pad * 0.25),
+    ],
     gapGivenX,
     grid,
     marginals,
@@ -288,8 +338,11 @@ export function hiddenGapProbabilities(board: HiddenBoard, prior: Prior) {
   const size = grid.length;
   const s = Math.max(prior.sigma, PRIOR_SIGMA_MIN);
   const mass = new Float64Array(size);
-  binMass(grid, step, prior, mass);
-  const leftTail = normCdf((grid[0] - step / 2 - prior.mu) / s);
+  binMass(grid, step, prior, mass, board.bounds);
+  // Mass below the grid only counts when there is no lower bound.
+  const leftTail = Number.isFinite(board.bounds.min)
+    ? 0
+    : normCdf((grid[0] - step / 2 - prior.mu) / s);
   let total = leftTail;
   for (let j = 0; j < size; j += 1) total += mass[j];
   const probs = gapGivenX.map((w) => {
@@ -297,7 +350,7 @@ export function hiddenGapProbabilities(board: HiddenBoard, prior: Prior) {
     for (let j = 0; j < size; j += 1) p += mass[j] * w[j];
     return p;
   });
-  // Renormalise: the prior is truncated at MAX_YEAR.
+  // Renormalise: the prior is truncated to the bounds.
   return total > 0 ? probs.map((p) => p / total) : probs;
 }
 

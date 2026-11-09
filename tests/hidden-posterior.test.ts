@@ -136,3 +136,42 @@ test("placing a new card updates the existing cards' posteriors", () => {
   assert.ok(a1.mean < a0.mean && a1.sd < a0.sd, `${a0.sd} -> ${a1.sd}`);
   assert.ok(b1.mean > b0.mean && b1.sd < b0.sd, `${b0.sd} -> ${b1.sd}`);
 });
+
+test("year bounds truncate priors and posteriors", () => {
+  const bounds = { max: 1900, min: 1600 };
+  const board = buildHiddenBoard(
+    [
+      { mu: 1550, sigma: 100 },
+      { mu: 1950, sigma: 100 },
+    ],
+    bounds,
+  );
+  for (const p of board.posteriors) {
+    assert.ok(p.q05 >= 1600 && p.q95 <= 1900, `${p.q05}..${p.q95}`);
+  }
+  // Brute force: truncated priors, ordered, on the integer grid.
+  let mass = 0;
+  let mean0 = 0;
+  const w = (y: number, mu: number) => Math.exp(-0.5 * ((y - mu) / 100) ** 2);
+  for (let a = 1600; a <= 1900; a += 1) {
+    for (let b = a + 1; b <= 1900; b += 1) {
+      const m = w(a, 1550) * w(b, 1950);
+      mass += m;
+      mean0 += m * a;
+    }
+  }
+  assert.ok(Math.abs(board.posteriors[0].mean - mean0 / mass) < 0.5);
+
+  // A new card's odds also respect the bounds and sum to 1.
+  const probs = hiddenGapProbabilities(board, { mu: 1500, sigma: 50 });
+  assert.ok(Math.abs(probs.reduce((x, y) => x + y, 0) - 1) < 1e-9);
+  assert.ok(probs[0] > 0.5); // pushed to the lower bound: likely before both
+});
+
+test("a prior entirely outside the bounds sits at the nearest bound", () => {
+  const board = buildHiddenBoard([{ mu: 100, sigma: 5 }], {
+    max: 1900,
+    min: 1600,
+  });
+  assert.equal(board.posteriors[0].median, 1600);
+});
