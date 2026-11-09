@@ -115,6 +115,15 @@ export const swatch = style({
 
 export const mixSwatch = style([swatch, { background: mixColor }]);
 export const guessSwatch = style([swatch, { background: guessColor }]);
+export const selectSwatch = style([
+  swatch,
+  {
+    background: "transparent",
+    borderTop: `2px dashed ${vars.color.text}`,
+    height: 0,
+    verticalAlign: "0.2rem",
+  },
+]);
 
 export const chartBox = style({
   position: "relative",
