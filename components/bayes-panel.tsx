@@ -351,6 +351,7 @@ export default function BayesPanel(props: Props) {
       </>
     );
     // Always keep the second line, so the chart doesn't jump during a drag.
+    if (hoverGap === null) secondSwatch = null;
     secondLine =
       hoverGap === null ? (
         <span className={styles.muted}>
@@ -544,6 +545,25 @@ export default function BayesPanel(props: Props) {
           </div>
         ) : null}
       </div>
+      {/* Legend for the line curves (the filled ones are keyed in the text above) */}
+      {(!revealed && !awaitingFirstCard) || board ? (
+        <div className={styles.legend}>
+          {!revealed ? (
+            <span>
+              <span className={styles.priorLineSwatch} />
+              Prior (this card)
+            </span>
+          ) : null}
+          {board ? (
+            <span>
+              <span className={styles.posteriorLineSwatch} />
+              {revealed
+                ? "Card posteriors"
+                : "Card posteriors (updated each turn)"}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <div
         className={styles.chartBox}
         ref={boxRef}
