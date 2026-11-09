@@ -99,10 +99,31 @@ export const readout = style({
 export const legend = style({
   alignItems: "center",
   color: vars.color.textMuted,
+  columnGap: vars.space.md,
   display: "flex",
   flexWrap: "wrap",
-  gap: vars.space.md,
+  fontSize: vars.fontSize.xs,
+  rowGap: vars.space.hairline,
 });
+
+const lineSwatch = style({
+  display: "inline-block",
+  height: 0,
+  marginRight: vars.space.xxs,
+  verticalAlign: "0.2rem",
+  width: "0.875rem",
+});
+
+export const priorLineSwatch = style([
+  lineSwatch,
+  { borderTop: `2px solid ${guessColor}` },
+]);
+
+/** Matches the faint card-posterior curves (text colour at low opacity). */
+export const posteriorLineSwatch = style([
+  lineSwatch,
+  { borderTop: `1.5px solid ${vars.color.textMuted}` },
+]);
 
 export const swatch = style({
   borderRadius: "2px",
