@@ -9,6 +9,7 @@ import DailyMetaChips, {
 } from "./daily-meta-chips";
 import DifficultySelector from "./difficulty-selector";
 import SiteHeader from "./site-header";
+import YearRangeSelector from "./year-range-selector";
 import * as buttonStyles from "../styles/button.css";
 import * as styles from "../styles/route-intro-screen.css";
 
@@ -89,6 +90,7 @@ export default function RouteIntroScreen(props: Props) {
                 nextLabel={nextDailyText}
               />
             )}
+            {showDifficulty ? <YearRangeSelector /> : null}
             <p className={styles.introCopy}>{introCopy}</p>
             <button
               className={classNames(

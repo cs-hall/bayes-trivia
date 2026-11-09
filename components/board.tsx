@@ -13,12 +13,17 @@ import {
   Prior,
   PRIOR_SIGMA_MAX,
   PRIOR_SIGMA_MIN,
+  resolveBounds,
 } from "../lib/hidden-posterior";
 import {
   createPlacementAnimationState,
   PlacementAnimationState,
   PlacementRequest,
 } from "../lib/placement-animation";
+import {
+  intersectYearRange,
+  useFreePlayYearRange,
+} from "../lib/use-free-play-year-range";
 import { GameDifficulty, GameState } from "../types/game";
 import { PreparedCard } from "../types/game";
 import { GameMode, SelectionRoute } from "../types/routes";
@@ -718,6 +723,17 @@ export default function Board(props: Props) {
     return latest === null ? null : (latest as { position: number }).position;
   }, [state.played]);
 
+  // Every card is known to lie in the free-play year range (and before now).
+  const yearRange = useFreePlayYearRange().range;
+  const effectiveRange =
+    gameMode === "free-play"
+      ? intersectYearRange(yearRange, selectionRoute)
+      : { max: null, min: null };
+  const bounds = React.useMemo(
+    () => resolveBounds(effectiveRange.min, effectiveRange.max),
+    [effectiveRange.min, effectiveRange.max],
+  );
+
   const priorsKey = state.played
     .map(
       (card) =>
@@ -737,10 +753,10 @@ export default function Board(props: Props) {
       (card) =>
         card.played.prior ?? { mu: fallbackMu, sigma: VAGUE_PRIOR_SIGMA },
     );
-    const board = buildHiddenBoard(priors);
+    const board = buildHiddenBoard(priors, bounds);
     return { board };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [priorsKey]);
+  }, [priorsKey, bounds]);
 
   const revealed = state.lives <= 0 || isDeckExhausted;
   const hiddenDatesValue = React.useMemo(() => {
@@ -812,6 +828,7 @@ export default function Board(props: Props) {
           <BayesPanel
             awaitingFirstCard={awaitingFirstCard}
             board={hidden?.board ?? null}
+            bounds={bounds}
             canReveal={
               !revealed && !isPlacementSettling && state.played.length > 0
             }

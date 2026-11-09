@@ -2,6 +2,7 @@ import React from "react";
 import { formatYear, normPdf, parseYear } from "../lib/gap-odds";
 import {
   HiddenBoard,
+  YearBounds,
   hiddenGapProbabilities,
   MAX_YEAR,
   PRIOR_SIGMA_MAX,
@@ -24,6 +25,8 @@ const BAND_COLUMNS = 160;
 interface Props {
   awaitingFirstCard: boolean;
   board: HiddenBoard | null;
+  /** Years every card is known to lie in (free-play range, current year). */
+  bounds: YearBounds;
   canReveal: boolean;
   dragGap: number | null;
   latestIndex: number | null;
@@ -105,6 +108,7 @@ export default function BayesPanel(props: Props) {
   const {
     awaitingFirstCard,
     board,
+    bounds,
     canReveal,
     dragGap,
     latestIndex,
@@ -171,13 +175,22 @@ export default function BayesPanel(props: Props) {
 
   // Axis: the board's posteriors (or a default span before the first card),
   // widened to take in the prior. At the reveal it also takes in every true year.
-  let liveDomain: [number, number] = board ? board.domain : [0, MAX_YEAR];
+  // Before the first card: the year range if one is set, else 0 to now.
+  const boundsLo = Number.isFinite(bounds.min) ? bounds.min : null;
+  let liveDomain: [number, number] = board
+    ? board.domain
+    : boundsLo !== null
+      ? [boundsLo, bounds.max]
+      : [0, MAX_YEAR];
   if (hasPrior && !revealed) {
     const lo = Math.min(liveDomain[0], priorMu! - 2 * priorSigma!);
     const hi = Math.max(liveDomain[1], priorMu! + 2 * priorSigma!);
     if (lo < liveDomain[0] || hi > liveDomain[1]) {
       const pad = (hi - lo) * 0.04;
-      liveDomain = [lo - pad, Math.min(hi + pad, MAX_YEAR + pad)];
+      liveDomain = [
+        boundsLo !== null ? Math.max(lo - pad, boundsLo - pad) : lo - pad,
+        Math.min(hi + pad, bounds.max + pad),
+      ];
     }
   }
   if (board && revealed && trueYears && trueYears.length > 0) {
@@ -233,7 +246,10 @@ export default function BayesPanel(props: Props) {
     Math.max(MARGIN_LEFT, Math.min(MARGIN_LEFT + plotWidth, px));
 
   const setMean = (year: number) => {
-    onYearTextChange(formatYear(Math.round(Math.min(year, MAX_YEAR))));
+    const lo = boundsLo ?? -Infinity;
+    onYearTextChange(
+      formatYear(Math.round(Math.max(lo, Math.min(year, bounds.max)))),
+    );
   };
   const setSd = (sd: number) => {
     const clamped = Math.max(1, Math.min(PRIOR_SIGMA_MAX, sd));
@@ -411,8 +427,13 @@ export default function BayesPanel(props: Props) {
   // The slot's edges are other cards' posteriors, so P(slot | x) fades in and
   // out rather than switching at a hard edge. Same scale as the prior, so the
   // restricted curve sits under it and its share of the area is the odds.
+  // The prior (and so the slot curves) is zero outside the known year range.
   const priorYs = hasPrior
-    ? xs.map((x) => normPdf((x - priorMu!) / priorSigma!))
+    ? xs.map((x) =>
+        x < bounds.min - 0.5 || x > bounds.max + 0.5
+          ? 0
+          : normPdf((x - priorMu!) / priorSigma!),
+      )
     : null;
   let priorPeak = 0;
   if (priorYs) for (const y of priorYs) priorPeak = Math.max(priorPeak, y);

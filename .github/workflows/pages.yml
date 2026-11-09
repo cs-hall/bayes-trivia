@@ -37,6 +37,9 @@ jobs:
           NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
         run: bun run build
 
+      - name: Make folder pages loadable on GitHub Pages
+        run: bun scripts/github-pages-folders.ts out
+
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
