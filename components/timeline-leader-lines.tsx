@@ -54,7 +54,7 @@ export default function TimelineLeaderLines(props: Props) {
       const axisPath = axisRef.current;
       const labels = labelsRef.current;
       if (!root || !svg || !axisPath || !labels) return;
-      const chartAxis = root.querySelector<SVGLineElement>("[data-bayes-axis]");
+      const chartAxis = root.querySelector<HTMLElement>("[data-bayes-axis]");
       const { ids: currentIds, medians: currentMedians } = dataRef.current;
       const hideAll = () => {
         pathRefs.current.forEach((p) =>
@@ -109,6 +109,9 @@ export default function TimelineLeaderLines(props: Props) {
         cards[cards.length - 1].x + 24
       ).toFixed(1)}`;
       const tickLabels: Array<{ text: string; x: number }> = [];
+      // Labels are spaced per gap between cards; also keep them apart across
+      // gaps, where two scales meet.
+      let lastLabelX = -Infinity;
       cards.forEach((c, k) => {
         d += `M${c.x.toFixed(1)},${(axisY - 4).toFixed(1)}V${(rowTop - 2).toFixed(1)}`;
         const next = cards[k + 1];
@@ -129,8 +132,13 @@ export default function TimelineLeaderLines(props: Props) {
           // Keep clear of the card ticks.
           if (x - c.x < 14 || next.x - x < 14) continue;
           d += `M${x.toFixed(1)},${(axisY - 3).toFixed(1)}V${(axisY + 3).toFixed(1)}`;
-          if (x > -40 && x < rootRect.width + 40) {
+          if (
+            x > -40 &&
+            x < rootRect.width + 40 &&
+            x - lastLabelX >= LABEL_MIN_PX
+          ) {
             tickLabels.push({ text: formatTick(y), x });
+            lastLabelX = x;
           }
         }
       });

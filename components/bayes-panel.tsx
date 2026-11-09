@@ -595,6 +595,25 @@ export default function BayesPanel(props: Props) {
         ref={boxRef}
         style={{ height: BOX_HEIGHT }}
       >
+        {/* Where the card lines land: the bottom of the year axis. A plain
+            element, because browsers disagree on the size of an invisible SVG
+            line (Safari can report it as zero, which hid every line). */}
+        {width > 0 ? (
+          <div
+            aria-hidden="true"
+            data-bayes-axis=""
+            data-hi={domain[1]}
+            data-lo={domain[0]}
+            style={{
+              height: 1,
+              left: MARGIN_LEFT,
+              pointerEvents: "none",
+              position: "absolute",
+              top: BOX_HEIGHT - 1,
+              width: plotWidth,
+            }}
+          />
+        ) : null}
         {width > 0 ? (
           <svg
             aria-label="Timeline: card posteriors, your prior and the best guess for the selected gap. Tap to set the prior's year; drag the bar ends to set ±."
@@ -676,17 +695,6 @@ export default function BayesPanel(props: Props) {
               x2={MARGIN_LEFT + plotWidth}
               y1={CHART_HEIGHT}
               y2={CHART_HEIGHT}
-            />
-            {/* Where the card leader lines land: the bottom of the year axis */}
-            <line
-              data-bayes-axis=""
-              data-hi={domain[1]}
-              data-lo={domain[0]}
-              stroke="none"
-              x1={MARGIN_LEFT}
-              x2={MARGIN_LEFT + plotWidth}
-              y1={BOX_HEIGHT}
-              y2={BOX_HEIGHT}
             />
             {/* Card posteriors */}
             {cardCurves.map((curve, i) =>
