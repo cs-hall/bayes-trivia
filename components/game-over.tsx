@@ -1,11 +1,13 @@
 import { motion } from "motion/react";
 import React from "react";
+import { CalibrationRecord } from "../lib/calibration";
 import { formatTimeUntilNextDaily } from "../lib/daily";
 import { buildShareText, getShareResults } from "../lib/share";
 import { PlayedCard } from "../types/cards";
 import { GameDifficulty } from "../types/game";
 import { GameMode, SelectionRoute } from "../types/routes";
 import Button from "./button";
+import CalibrationReview from "./calibration-review";
 import DailyCompletedSummary from "./daily-completed-summary";
 import { DAILY_DATE_LOCALE, formatDailyDate } from "./daily-meta-chips";
 import FreePlayBreadcrumbs from "./free-play-breadcrumbs";
@@ -13,6 +15,10 @@ import Score from "./score";
 import * as styles from "../styles/game-over.css";
 
 interface Props {
+  /** Every card scored on this device (this game included). */
+  calibrationHistory?: CalibrationRecord[];
+  /** This game's cards with a prior. */
+  calibrationRecords?: CalibrationRecord[];
   dailyDateKey?: string;
   difficulty: GameDifficulty;
   gameMode: GameMode;
@@ -29,6 +35,8 @@ const defaultShareText = "Share";
 
 export default function GameOver(props: Props) {
   const {
+    calibrationHistory = [],
+    calibrationRecords = [],
     dailyDateKey,
     difficulty,
     gameMode,
@@ -141,10 +149,19 @@ export default function GameOver(props: Props) {
           {selectionRoute ? (
             <FreePlayBreadcrumbs selectionRoute={selectionRoute} />
           ) : null}
-          <div className={styles.scoresWrapper}>
-            <Score score={score} title="Score" />
-            <Score score={highscore} title="Best" />
-          </div>
+          {calibrationRecords.length > 0 ? (
+            <CalibrationReview
+              history={calibrationHistory}
+              highscore={highscore}
+              records={calibrationRecords}
+              score={score}
+            />
+          ) : (
+            <div className={styles.scoresWrapper}>
+              <Score score={score} title="Score" />
+              <Score score={highscore} title="Best" />
+            </div>
+          )}
           <div className={styles.buttons}>
             {resetGame ? (
               <Button fullWidth onClick={resetGame} text="Play again" />

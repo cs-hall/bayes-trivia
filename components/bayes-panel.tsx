@@ -316,38 +316,11 @@ export default function BayesPanel(props: Props) {
   let firstSwatch: string | null = styles.mixSwatch;
   let secondSwatch: string | null = styles.selectSwatch;
 
-  if (revealed && board && trueYears) {
+  if (revealed) {
+    // The game review (centre of the screen) now covers calibration.
+    firstLine = null;
     firstSwatch = null;
     secondSwatch = null;
-    firstLine = <span className={styles.muted}>Game over: dates revealed</span>;
-    // Calibration: how often did the true year land in the 50% / 90% intervals?
-    let in50 = 0;
-    let in90 = 0;
-    let postErr = 0;
-    let priorErr = 0;
-    board.posteriors.forEach((p, i) => {
-      const y = trueYears[i];
-      const u = p.cdf(y);
-      if (u >= 0.25 && u <= 0.75) in50 += 1;
-      if (u >= 0.05 && u <= 0.95) in90 += 1;
-      postErr += Math.abs(p.median - y);
-      priorErr += Math.abs(board.priors[i].mu - y);
-    });
-    const n = board.posteriors.length;
-    secondLine = (
-      <>
-        True year inside 50% interval{" "}
-        <span className={styles.strong}>
-          {in50}/{n}
-        </span>
-        , 90% interval{" "}
-        <span className={styles.strong}>
-          {in90}/{n}
-        </span>
-        . Typical miss: prior {Math.round(priorErr / n)} yrs → posterior{" "}
-        <span className={styles.strong}>{Math.round(postErr / n)} yrs</span>
-      </>
-    );
   } else if (awaitingFirstCard) {
     firstSwatch = styles.guessSwatch;
     secondSwatch = null;
@@ -560,10 +533,12 @@ export default function BayesPanel(props: Props) {
         </div>
       ) : null}
       <div className={styles.readout}>
-        <div>
-          {firstSwatch ? <span className={firstSwatch} /> : null}
-          {firstLine}
-        </div>
+        {firstLine ? (
+          <div>
+            {firstSwatch ? <span className={firstSwatch} /> : null}
+            {firstLine}
+          </div>
+        ) : null}
         {secondLine ? (
           <div>
             {secondSwatch ? <span className={secondSwatch} /> : null}

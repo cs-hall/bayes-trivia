@@ -81,3 +81,23 @@ export const bottomWithOdds = style({
   // Room above the card row for the bent year axis and its labels.
   paddingTop: "1.75rem",
 });
+
+/**
+ * Final screen: nothing is dragged any more, so the board scrolls vertically
+ * and every part (Bayes chart, game review, card row) keeps its full height.
+ */
+export const wrapperRevealed = style({
+  overflowX: "hidden",
+  overflowY: "auto",
+});
+
+export const topRevealed = style({
+  flex: "0 0 auto",
+});
+
+export const bottomRevealed = style({
+  flex: "0 0 auto",
+  // Room for the card row plus the year, prior and posterior under it.
+  minHeight: `calc(${vars.size.cardHeight} + 7.5rem)`,
+  paddingBottom: vars.space.lg,
+});
