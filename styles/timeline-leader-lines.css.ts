@@ -1,7 +1,15 @@
-import { style } from "@vanilla-extract/css";
+import { createVar, style } from "@vanilla-extract/css";
+import { media } from "./foundation";
 import { vars } from "./theme.css";
 
+/** Same orange as the prior and the true-year dots on the Bayes chart. */
+const trueColor = createVar();
+
 export const overlay = style({
+  vars: { [trueColor]: "#eb6834" },
+  "@media": {
+    [media.dark]: { vars: { [trueColor]: "#d95926" } },
+  },
   color: vars.color.text,
   left: 0,
   overflow: "visible",
@@ -44,4 +52,17 @@ export const tickLabel = style({
   fill: vars.color.textMuted,
   fontSize: "10px",
   fontVariantNumeric: "tabular-nums",
+});
+
+/** After the reveal: card → true year, in orange. */
+export const trueLine = style([
+  line,
+  {
+    stroke: trueColor,
+    strokeOpacity: 0.9,
+  },
+]);
+
+export const trueDot = style({
+  fill: trueColor,
 });

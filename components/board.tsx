@@ -905,12 +905,9 @@ export default function Board(props: Props) {
             }
             ids={state.played.map((card) => card.id)}
             latestIndex={latestIndex}
-            medians={
-              revealed
-                ? state.played.map((card) => card.year)
-                : hidden.board.posteriors.map((p) => p.median)
-            }
+            medians={hidden.board.posteriors.map((p) => p.median)}
             rootRef={boardRef}
+            trueYears={revealed ? state.played.map((card) => card.year) : null}
           />
         ) : null}
         {focusedCard && !revealed ? (
