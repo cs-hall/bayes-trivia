@@ -131,6 +131,7 @@ export default function BayesPanel(props: Props) {
   } = props;
   const [confirmReveal, setConfirmReveal] = React.useState(false);
   const [showNudge, setShowNudge] = React.useState(false);
+  const [showBestGuess, setShowBestGuess] = useShowBestGuess();
   const yearInputRef = React.useRef<HTMLInputElement | null>(null);
   const [boxRef, width] = useWidth();
   // While dragging the prior, the axis is frozen so it can't rescale under
@@ -175,7 +176,9 @@ export default function BayesPanel(props: Props) {
   // Best guess: the prior's most likely slot. Selection: the slot under the
   // dragged card. Both are drawn as "prior restricted to the slot", so over
   // the best slot the selection curve lies exactly on the best-guess curve.
-  const bestGap = revealed ? null : priorBest;
+  // The best-guess highlight is opt-in: off by default, players find the
+  // best slot themselves by dragging.
+  const bestGap = revealed || !showBestGuess ? null : priorBest;
   const hoverGap = revealed ? null : dragGap;
 
   // Axis: the board's posteriors (or a default span before the first card),
@@ -335,6 +338,27 @@ export default function BayesPanel(props: Props) {
         First card: tap the timeline or type a year, then press Place
       </span>
     );
+  } else if (priorProbs && !showBestGuess) {
+    firstSwatch = null;
+    firstLine = (
+      <span className={styles.muted}>
+        Drag the card over a slot to see how often it's right
+      </span>
+    );
+    if (hoverGap === null) secondSwatch = null;
+    secondLine =
+      hoverGap === null ? (
+        <span className={styles.muted}>No slot under the card</span>
+      ) : (
+        <>
+          This slot: <span className={styles.strong}>{gapLabel(hoverGap)}</span>
+          , correct{" "}
+          <span className={styles.strong}>
+            {pct(priorProbs[hoverGap] ?? 0)}
+          </span>{" "}
+          of the time
+        </>
+      );
   } else if (priorProbs && bestGap !== null) {
     firstLine = (
       <>
@@ -378,7 +402,9 @@ export default function BayesPanel(props: Props) {
     );
     secondLine = (
       <span className={styles.muted}>
-        Best guess: appears once you set a prior
+        {showBestGuess
+          ? "Best guess: appears once you set a prior"
+          : "Then drag the card over a slot to see its odds"}
       </span>
     );
   }
@@ -399,7 +425,8 @@ export default function BayesPanel(props: Props) {
     return stops;
   };
   const bestBand = bandStops(bestGap);
-  const hoverBand = hoverGap !== bestGap ? bandStops(hoverGap) : null;
+  const hoverBand =
+    hoverGap !== null && hoverGap !== bestGap ? bandStops(hoverGap) : null;
 
   // Prior, and the prior restricted to a slot: prior(x) · P(slot | card at x).
   // The slot's edges are other cards' posteriors, so P(slot | x) fades in and
@@ -501,6 +528,15 @@ export default function BayesPanel(props: Props) {
           ) : (
             <span className={styles.headerActions}>
               {revealButton}
+              <button
+                aria-pressed={showBestGuess}
+                className={showBestGuess ? styles.toggleOn : styles.toggle}
+                onClick={() => setShowBestGuess(!showBestGuess)}
+                title="Highlight the slot your prior thinks is most likely"
+                type="button"
+              >
+                Best guess {showBestGuess ? "on" : "off"}
+              </button>
               <button
                 className={styles.toggle}
                 onClick={() => onOpenChange(false)}
@@ -948,4 +984,27 @@ export default function BayesPanel(props: Props) {
       </div>
     </section>
   );
+}
+
+const SHOW_BEST_GUESS_KEY = "bayes-trivia:show-best-guess";
+
+/** The best-guess highlight setting, off by default and remembered. */
+function useShowBestGuess(): [boolean, (on: boolean) => void] {
+  const [on, setOn] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      setOn(window.localStorage.getItem(SHOW_BEST_GUESS_KEY) === "1");
+    } catch {
+      // Storage unavailable: keep the default.
+    }
+  }, []);
+  const set = React.useCallback((next: boolean) => {
+    setOn(next);
+    try {
+      window.localStorage.setItem(SHOW_BEST_GUESS_KEY, next ? "1" : "0");
+    } catch {
+      // Storage unavailable: the choice lasts for this visit.
+    }
+  }, []);
+  return [on, set];
 }

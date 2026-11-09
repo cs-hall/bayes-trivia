@@ -50,6 +50,15 @@ export const toggle = style({
   whiteSpace: "nowrap",
 });
 
+export const toggleOn = style([
+  toggle,
+  {
+    background: vars.color.accent,
+    borderColor: vars.color.accent,
+    color: vars.color.accentText,
+  },
+]);
+
 export const collapsedToggle = style([
   toggle,
   {
