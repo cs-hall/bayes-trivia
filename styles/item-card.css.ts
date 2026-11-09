@@ -166,10 +166,15 @@ export const imageTint = style({
 });
 
 export const datePillAnchor = style({
+  alignItems: "center",
   backfaceVisibility: "hidden",
-  bottom: "-2.625rem",
   display: "flex",
+  // Anchored from the top (same place as before: 0.625rem below the card),
+  // so the final-screen details stack under the pill rather than pushing it
+  // up into the card.
+  flexDirection: "column",
   justifyContent: "center",
+  top: "calc(100% + 0.625rem)",
   left: "50%",
   position: "absolute",
   transform: "translateX(-50%) translateZ(0.125rem)",
@@ -309,4 +314,59 @@ globalStyle(`${links} a:hover`, {
 export const focusedCard = style({
   borderRadius: vars.radius.md,
   boxShadow: `0 0 0 3px ${vars.color.text}`,
+});
+
+// ---- Final screen ---------------------------------------------------------
+
+/** Prior / posterior estimates stacked under the true year. */
+export const revealDetail = style({
+  alignItems: "center",
+  color: vars.color.textMuted,
+  display: "flex",
+  flexDirection: "column",
+  fontFamily: vars.font.body,
+  fontSize: vars.fontSize.xs,
+  fontVariantNumeric: "tabular-nums",
+  lineHeight: 1.25,
+  marginTop: "0.125rem",
+  whiteSpace: "nowrap",
+});
+
+/** "Best prior" / "Worst prior" badge on the card's top edge. */
+const priorTag = style({
+  borderRadius: vars.radius.pill,
+  color: "#ffffff",
+  fontFamily: vars.font.body,
+  fontSize: vars.fontSize.xs,
+  fontWeight: vars.fontWeight.semibold,
+  left: "50%",
+  lineHeight: 1,
+  padding: `${vars.space.xxs} ${vars.space.sm}`,
+  pointerEvents: "none",
+  position: "absolute",
+  top: 0,
+  transform: "translate(-50%, -50%)",
+  whiteSpace: "nowrap",
+  zIndex: 5,
+});
+
+export const bestPriorTag = style([
+  priorTag,
+  { background: vars.color.success },
+]);
+export const worstPriorTag = style([
+  priorTag,
+  { background: vars.color.danger },
+]);
+
+/** Best / worst prior (by log score): a green / red glow around the card. */
+export const bestPriorCard = style({});
+export const worstPriorCard = style({});
+
+globalStyle(`${bestPriorCard} ${front}, ${bestPriorCard} ${back}`, {
+  boxShadow: `0 0 0 3px ${vars.color.success}, 0 0 1.25rem 0.25rem ${vars.color.success}`,
+});
+
+globalStyle(`${worstPriorCard} ${front}, ${worstPriorCard} ${back}`, {
+  boxShadow: `0 0 0 3px ${vars.color.danger}, 0 0 1.25rem 0.25rem ${vars.color.danger}`,
 });

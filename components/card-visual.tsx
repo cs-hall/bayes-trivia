@@ -66,6 +66,10 @@ export default function CardVisual(props: Props) {
   const cardThemeStyle = useCardTheme(item.deckThemeHue);
   const hiddenDates = useHiddenDates();
   const datesHidden = !hiddenDates.revealed;
+  const revealDetail =
+    hiddenDates.revealed && "played" in item
+      ? (hiddenDates.revealDetails?.[item.id] ?? null)
+      : null;
   const yearLabel = datesHidden
     ? (hiddenDates.labels[item.id] ?? "?")
     : item.year < 0
@@ -81,6 +85,8 @@ export default function CardVisual(props: Props) {
         [styles.deckCard]: surface === "deck",
         [styles.played]: "played" in item,
         [styles.flipped]: flipped,
+        [styles.bestPriorCard]: revealDetail?.rank === "best",
+        [styles.worstPriorCard]: revealDetail?.rank === "worst",
       })}
       onClick={onClick}
       style={{
@@ -88,6 +94,17 @@ export default function CardVisual(props: Props) {
         ...style,
       }}
     >
+      {revealDetail?.rank ? (
+        <span
+          className={
+            revealDetail.rank === "best"
+              ? styles.bestPriorTag
+              : styles.worstPriorTag
+          }
+        >
+          {revealDetail.rank === "best" ? "Best prior" : "Worst prior"}
+        </span>
+      ) : null}
       <div className={styles.cardScene}>
         <motion.div
           animate={effectiveAnimateTransform}
@@ -191,6 +208,14 @@ export default function CardVisual(props: Props) {
             >
               <span>{yearLabel}</span>
             </motion.div>
+            {revealDetail ? (
+              <div className={styles.revealDetail}>
+                {revealDetail.prior !== null ? (
+                  <span>Prior {revealDetail.prior}</span>
+                ) : null}
+                <span>Posterior {revealDetail.posterior}</span>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

@@ -4,6 +4,7 @@ import {
   buildHiddenBoard,
   buildHiddenDecisionMap,
   hiddenGapProbabilities,
+  priorLogScore,
   summariseHiddenGap,
 } from "../lib/hidden-posterior";
 
@@ -174,4 +175,32 @@ test("a prior entirely outside the bounds sits at the nearest bound", () => {
     min: 1600,
   });
   assert.equal(board.posteriors[0].median, 1600);
+});
+
+test("prior log score rewards accurate, honest priors", () => {
+  // Exactly right with ±10: log of the mass on [y-½, y+½] ≈ log(1/(10√(2π))).
+  close(
+    priorLogScore({ mu: 1850, sigma: 10 }, 1850),
+    Math.log(1 / (10 * Math.sqrt(2 * Math.PI))),
+    1e-3,
+  );
+  // Closer beats further at the same ±.
+  assert.ok(
+    priorLogScore({ mu: 1850, sigma: 50 }, 1860) >
+      priorLogScore({ mu: 1850, sigma: 50 }, 1950),
+  );
+  // A confident miss scores far worse than an honest wide prior.
+  assert.ok(
+    priorLogScore({ mu: 1850, sigma: 2 }, 1950) <
+      priorLogScore({ mu: 1850, sigma: 100 }, 1950) - 100,
+  );
+  // Extreme tails stay finite.
+  assert.ok(Number.isFinite(priorLogScore({ mu: 0, sigma: 1 }, 2000)));
+  // Bounds renormalise: cutting off half the prior adds log 2.
+  close(
+    priorLogScore({ mu: 1850, sigma: 50 }, 1860, { max: 2026, min: 1850 }) -
+      priorLogScore({ mu: 1850, sigma: 50 }, 1860),
+    Math.log(2),
+    0.02,
+  );
 });

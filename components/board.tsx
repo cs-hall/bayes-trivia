@@ -7,12 +7,13 @@ import {
   preloadImage,
 } from "../lib/game-selection";
 import { parseYear } from "../lib/gap-odds";
-import { HiddenDatesContext } from "../lib/hidden-dates-context";
+import { HiddenDatesContext, RevealDetail } from "../lib/hidden-dates-context";
 import {
   buildHiddenBoard,
   Prior,
   PRIOR_SIGMA_MAX,
   PRIOR_SIGMA_MIN,
+  priorLogScore,
   resolveBounds,
 } from "../lib/hidden-posterior";
 import {
@@ -57,6 +58,11 @@ function parsePrior(yearText: string, sigmaText: string): Prior | null {
     mu,
     sigma: Math.min(PRIOR_SIGMA_MAX, Math.max(PRIOR_SIGMA_MIN, sigma)),
   };
+}
+
+function formatPlainYear(year: number) {
+  const y = Math.round(year);
+  return y < 0 ? `${Math.abs(y)} BC` : String(y);
 }
 
 function formatEstimate(median: number, sd: number) {
@@ -807,8 +813,50 @@ export default function Board(props: Props) {
         }
       });
     }
-    return { focusedId, labels, onCardTap: handleCardTap, revealed };
-  }, [focusedId, handleCardTap, hidden, revealed, state.played]);
+    // Final screen: prior and posterior estimates under each true year, and
+    // the best and worst prior by log score.
+    let revealDetails: Record<string, RevealDetail> | undefined;
+    if (revealed && hidden) {
+      revealDetails = {};
+      const scores: Array<{ id: string; score: number }> = [];
+      state.played.forEach((card, index) => {
+        const posterior = hidden.board.posteriors[index];
+        const prior = card.played.prior;
+        const clamp = (y: number) =>
+          Math.max(
+            Number.isFinite(bounds.min) ? bounds.min : -Infinity,
+            Math.min(bounds.max, y),
+          );
+        revealDetails![card.id] = {
+          posterior: posterior ? formatPlainYear(posterior.median) : "?",
+          prior: prior ? formatPlainYear(clamp(prior.mu)) : null,
+          rank: null,
+        };
+        if (prior) {
+          scores.push({
+            id: card.id,
+            score: priorLogScore(prior, card.year, bounds),
+          });
+        }
+      });
+      if (scores.length >= 2) {
+        const sorted = [...scores].sort((a, b) => b.score - a.score);
+        const best = sorted[0];
+        const worst = sorted[sorted.length - 1];
+        if (best.score > worst.score) {
+          revealDetails[best.id].rank = "best";
+          revealDetails[worst.id].rank = "worst";
+        }
+      }
+    }
+    return {
+      focusedId,
+      labels,
+      onCardTap: handleCardTap,
+      revealDetails,
+      revealed,
+    };
+  }, [bounds, focusedId, handleCardTap, hidden, revealed, state.played]);
 
   const handleReveal = React.useCallback(() => {
     if (isPlacementSettling || state.lives <= 0) return;
@@ -857,12 +905,9 @@ export default function Board(props: Props) {
             }
             ids={state.played.map((card) => card.id)}
             latestIndex={latestIndex}
-            medians={
-              revealed
-                ? state.played.map((card) => card.year)
-                : hidden.board.posteriors.map((p) => p.median)
-            }
+            medians={hidden.board.posteriors.map((p) => p.median)}
             rootRef={boardRef}
+            trueYears={revealed ? state.played.map((card) => card.year) : null}
           />
         ) : null}
         {focusedCard && !revealed ? (
