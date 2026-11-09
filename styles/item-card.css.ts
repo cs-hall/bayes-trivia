@@ -304,3 +304,9 @@ globalStyle(`${links} a`, {
 globalStyle(`${links} a:hover`, {
   color: cardForegroundVar,
 });
+
+/** A placed card the player has tapped: ringed in the row. */
+export const focusedCard = style({
+  borderRadius: vars.radius.md,
+  boxShadow: `0 0 0 3px ${vars.color.text}`,
+});

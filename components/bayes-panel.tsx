@@ -29,6 +29,9 @@ interface Props {
   bounds: YearBounds;
   canReveal: boolean;
   dragGap: number | null;
+  /** Placed card the player tapped: its posterior is highlighted. */
+  focusedIndex: number | null;
+  focusedTitle: null | string;
   latestIndex: number | null;
   nudge: number;
   onConfirmFirstCard: () => void;
@@ -111,6 +114,8 @@ export default function BayesPanel(props: Props) {
     bounds,
     canReveal,
     dragGap,
+    focusedIndex,
+    focusedTitle,
     latestIndex,
     nudge,
     onConfirmFirstCard,
@@ -684,31 +689,35 @@ export default function BayesPanel(props: Props) {
               y2={BOX_HEIGHT}
             />
             {/* Card posteriors */}
-            {cardCurves.map((curve, i) => (
-              <path
-                d={linePath(
-                  xs,
-                  curve,
-                  toX,
-                  CHART_HEIGHT,
-                  curveHeight * 0.55,
-                  false,
-                )}
-                fill="none"
-                key={`c${i}`}
-                stroke="currentColor"
-                strokeOpacity={
-                  revealed
-                    ? 0.55
-                    : neighbours.has(i)
-                      ? 0.75
-                      : i === latestIndex
-                        ? 0.5
-                        : 0.25
-                }
-                strokeWidth={neighbours.has(i) ? 1.5 : 1}
-              />
-            ))}
+            {cardCurves.map((curve, i) =>
+              i === focusedIndex ? null : (
+                <path
+                  d={linePath(
+                    xs,
+                    curve,
+                    toX,
+                    CHART_HEIGHT,
+                    curveHeight * 0.55,
+                    false,
+                  )}
+                  fill="none"
+                  key={`c${i}`}
+                  stroke="currentColor"
+                  strokeOpacity={
+                    focusedIndex !== null
+                      ? 0.12
+                      : revealed
+                        ? 0.55
+                        : neighbours.has(i)
+                          ? 0.75
+                          : i === latestIndex
+                            ? 0.5
+                            : 0.25
+                  }
+                  strokeWidth={neighbours.has(i) ? 1.5 : 1}
+                />
+              ),
+            )}
             {/* Posterior predictive for the selected gap */}
             {/* Best guess: the prior restricted to its most likely slot */}
             {bestYs ? (
@@ -762,6 +771,70 @@ export default function BayesPanel(props: Props) {
                 strokeWidth={2}
               />
             ) : null}
+            {/* Tapped card: its posterior, highlighted and labelled */}
+            {focusedIndex !== null && cardCurves[focusedIndex] && board
+              ? (() => {
+                  const curve = cardCurves[focusedIndex];
+                  const post = board.posteriors[focusedIndex];
+                  const height = curveHeight * 0.85;
+                  const x = toX(post.median);
+                  const anchor =
+                    x < MARGIN_LEFT + 70
+                      ? "start"
+                      : x > MARGIN_LEFT + plotWidth - 70
+                        ? "end"
+                        : "middle";
+                  const title =
+                    focusedTitle && focusedTitle.length > 28
+                      ? `${focusedTitle.slice(0, 27)}…`
+                      : focusedTitle;
+                  return (
+                    <g>
+                      <path
+                        d={linePath(xs, curve, toX, CHART_HEIGHT, height, true)}
+                        fill="currentColor"
+                        fillOpacity={0.12}
+                      />
+                      <path
+                        d={linePath(
+                          xs,
+                          curve,
+                          toX,
+                          CHART_HEIGHT,
+                          height,
+                          false,
+                        )}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2.5}
+                      />
+                      <text
+                        fill="currentColor"
+                        fontSize={10}
+                        fontWeight={600}
+                        textAnchor={anchor}
+                        x={x}
+                        y={CHART_HEIGHT - height - 14}
+                      >
+                        {title}
+                      </text>
+                      <text
+                        fill="currentColor"
+                        fillOpacity={0.75}
+                        fontSize={10}
+                        textAnchor={anchor}
+                        x={x}
+                        y={CHART_HEIGHT - height - 3}
+                      >
+                        ≈{formatYear(post.median)} ±
+                        {post.sd < 10
+                          ? Math.max(1, Math.round(post.sd))
+                          : Number(post.sd.toPrecision(2))}
+                      </text>
+                    </g>
+                  );
+                })()
+              : null}
             {priorCurve && !revealed ? (
               <path
                 d={priorCurve}
