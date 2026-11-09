@@ -2,13 +2,9 @@ import React from "react";
 import { formatYear, normPdf, parseYear } from "../lib/gap-odds";
 import {
   HiddenBoard,
-  HiddenDecisionMap,
   hiddenGapProbabilities,
-  MAP_SIGMA_MAX,
-  MAP_SIGMA_MIN,
   MAX_YEAR,
   PRIOR_SIGMA_MAX,
-  summariseHiddenGap,
 } from "../lib/hidden-posterior";
 import * as styles from "../styles/gap-odds-panel.css";
 import { vars } from "../styles/theme.css";
@@ -31,7 +27,6 @@ interface Props {
   canReveal: boolean;
   dragGap: number | null;
   latestIndex: number | null;
-  map: HiddenDecisionMap | null;
   nudge: number;
   onConfirmFirstCard: () => void;
   onOpenChange: (open: boolean) => void;
@@ -81,9 +76,11 @@ function linePath(
   baseline: number,
   height: number,
   closed: boolean,
+  /** Scale against this peak instead of the curve's own maximum. */
+  fixedPeak?: number,
 ) {
-  let peak = 0;
-  for (const y of ys) peak = Math.max(peak, y);
+  let peak = fixedPeak ?? 0;
+  if (fixedPeak === undefined) for (const y of ys) peak = Math.max(peak, y);
   if (!(peak > 0)) return "";
   const pts = xs.map(
     (x, i) =>
@@ -111,7 +108,6 @@ export default function BayesPanel(props: Props) {
     canReveal,
     dragGap,
     latestIndex,
-    map,
     nudge,
     onConfirmFirstCard,
     onOpenChange,
@@ -167,14 +163,11 @@ export default function BayesPanel(props: Props) {
   const priorBest = priorProbs
     ? priorProbs.reduce((b, p, i, arr) => (p > arr[b] ? i : b), 0)
     : null;
-  const selectedGap = revealed ? null : (dragGap ?? priorBest);
-
-  const summary = React.useMemo(() => {
-    if (!board || !map || selectedGap === null || selectedGap > cardCount) {
-      return null;
-    }
-    return summariseHiddenGap(board, map, selectedGap, SAMPLE_COUNT);
-  }, [board, map, selectedGap, cardCount]);
+  // Best guess: the prior's most likely slot. Selection: the slot under the
+  // dragged card. Both are drawn as "prior restricted to the slot", so over
+  // the best slot the selection curve lies exactly on the best-guess curve.
+  const bestGap = revealed ? null : priorBest;
+  const hoverGap = revealed ? null : dragGap;
 
   // Axis: the board's posteriors (or a default span before the first card),
   // widened to take in the prior. At the reveal it also takes in every true year.
@@ -231,7 +224,7 @@ export default function BayesPanel(props: Props) {
     if (ps.length === 0) return "anywhere";
     if (g === 0) return `before ${approx(ps[0].median)}`;
     if (g === ps.length) return `after ${approx(ps[ps.length - 1].median)}`;
-    return `${approx(ps[g - 1].median)}–${approx(ps[g].median)}`;
+    return `between ${approx(ps[g - 1].median)} and ${approx(ps[g].median)}`;
   };
 
   const curveHeight = CHART_HEIGHT - 16;
@@ -296,50 +289,16 @@ export default function BayesPanel(props: Props) {
   };
 
   // ---- Text lines ---------------------------------------------------------
-  let priorLine: React.ReactNode;
-  if (revealed) {
-    priorLine = <span className={styles.muted}>Game over: dates revealed</span>;
-  } else if (awaitingFirstCard) {
-    priorLine = hasPrior ? (
-      <>
-        First card prior:{" "}
-        <span className={styles.strong}>{formatYear(priorMu!)}</span> ±{" "}
-        {Math.round(priorSigma!)} yrs
-      </>
-    ) : (
-      <span className={styles.muted}>
-        First card: tap the timeline or type a year, then press Place
-      </span>
-    );
-  } else if (priorProbs && priorBest !== null) {
-    const ranked = priorProbs
-      .map((p, i) => ({ i, p }))
-      .sort((a, b) => b.p - a.p);
-    priorLine = (
-      <>
-        Prior → best{" "}
-        <span className={styles.strong}>{gapLabel(priorBest)}</span> ·{" "}
-        <span className={styles.strong}>{Math.round(ranked[0].p * 100)}%</span>
-        {ranked[1] ? (
-          <span className={styles.muted}>
-            {" "}
-            (next {gapLabel(ranked[1].i)} · {Math.round(ranked[1].p * 100)}%)
-          </span>
-        ) : null}
-      </>
-    );
-  } else {
-    priorLine = (
-      <span className={styles.muted}>
-        Prior: tap the timeline (drag the bar ends for ±), or type a year
-      </span>
-    );
-  }
+  const pct = (p: number) => `${Math.round(p * 100)}%`;
+  let firstLine: React.ReactNode;
+  let secondLine: React.ReactNode = null;
+  let firstSwatch: string | null = styles.mixSwatch;
+  let secondSwatch: string | null = styles.selectSwatch;
 
-  let posteriorLine: React.ReactNode = (
-    <span className={styles.muted}>Best guess: drag the card over a gap</span>
-  );
   if (revealed && board && trueYears) {
+    firstSwatch = null;
+    secondSwatch = null;
+    firstLine = <span className={styles.muted}>Game over: dates revealed</span>;
     // Calibration: how often did the true year land in the 50% / 90% intervals?
     let in50 = 0;
     let in90 = 0;
@@ -354,7 +313,7 @@ export default function BayesPanel(props: Props) {
       priorErr += Math.abs(board.priors[i].mu - y);
     });
     const n = board.posteriors.length;
-    posteriorLine = (
+    secondLine = (
       <>
         True year inside 50% interval{" "}
         <span className={styles.strong}>
@@ -368,35 +327,65 @@ export default function BayesPanel(props: Props) {
         <span className={styles.strong}>{Math.round(postErr / n)} yrs</span>
       </>
     );
-  } else if (selectedGap !== null && summary && board) {
-    const source = dragGap !== null ? "Hovering" : "Prior's gap";
-    const label = (
-      <span className={styles.strong}>{gapLabel(selectedGap)}</span>
+  } else if (awaitingFirstCard) {
+    firstSwatch = styles.guessSwatch;
+    secondSwatch = null;
+    firstLine = hasPrior ? (
+      <>
+        First card prior:{" "}
+        <span className={styles.strong}>{formatYear(priorMu!)}</span> ±{" "}
+        {Math.round(priorSigma!)} yrs
+      </>
+    ) : (
+      <span className={styles.muted}>
+        First card: tap the timeline or type a year, then press Place
+      </span>
     );
-    if (summary.muRange === null || summary.maxSigma === null) {
-      posteriorLine = (
+  } else if (priorProbs && bestGap !== null) {
+    firstLine = (
+      <>
+        Best guess: <span className={styles.strong}>{gapLabel(bestGap)}</span>,
+        correct{" "}
+        <span className={styles.strong}>{pct(priorProbs[bestGap])}</span> of the
+        time
+      </>
+    );
+    // Always keep the second line, so the chart doesn't jump during a drag.
+    secondLine =
+      hoverGap === null ? (
+        <span className={styles.muted}>
+          Drag the card over a slot to compare
+        </span>
+      ) : hoverGap === bestGap ? (
         <>
-          Best guess · {source} {label}: never the best pick for ±{" "}
-          {MAP_SIGMA_MIN}–{MAP_SIGMA_MAX} yrs
+          This slot: <span className={styles.strong}>your best guess</span>,
+          correct{" "}
+          <span className={styles.strong}>{pct(priorProbs[hoverGap])}</span> of
+          the time
         </>
-      );
-    } else {
-      const topSigma = map ? map.sigmas[map.rows - 1] : MAP_SIGMA_MAX;
-      const sigmaPart =
-        summary.maxSigma >= topSigma * 0.999
-          ? `any ± up to ${MAP_SIGMA_MAX}`
-          : `± up to ${Math.round(summary.maxSigma)}`;
-      posteriorLine = (
+      ) : (
         <>
-          Best guess · {source} {label}: right call for priors{" "}
-          {formatYear(summary.muRange[0])} to {formatYear(summary.muRange[1])},{" "}
-          {sigmaPart} yrs · lands here{" "}
+          This slot: <span className={styles.strong}>{gapLabel(hoverGap)}</span>
+          , correct{" "}
           <span className={styles.strong}>
-            {Math.round(summary.pCorrect * 100)}%
-          </span>
+            {pct(priorProbs[hoverGap] ?? 0)}
+          </span>{" "}
+          of the time
         </>
       );
-    }
+  } else {
+    firstSwatch = styles.guessSwatch;
+    secondSwatch = null;
+    firstLine = (
+      <span className={styles.muted}>
+        Prior: tap the timeline (drag the bar ends for ±), or type a year
+      </span>
+    );
+    secondLine = (
+      <span className={styles.muted}>
+        Best guess: appears once you set a prior
+      </span>
+    );
   }
 
   // ---- Chart pieces -------------------------------------------------------
@@ -414,25 +403,36 @@ export default function BayesPanel(props: Props) {
     }
     return stops;
   };
-  const selectedBand =
-    selectedGap !== priorBest ? bandStops(selectedGap) : null;
-  const priorBand = bandStops(priorBest);
+  const bestBand = bandStops(bestGap);
+  const hoverBand = hoverGap !== bestGap ? bandStops(hoverGap) : null;
 
-  const priorCurve = hasPrior
-    ? linePath(
-        xs,
-        xs.map((x) => normPdf((x - priorMu!) / priorSigma!)),
-        toX,
-        CHART_HEIGHT,
-        curveHeight,
-        false,
-      )
+  // Prior, and the prior restricted to a slot: prior(x) · P(slot | card at x).
+  // The slot's edges are other cards' posteriors, so P(slot | x) fades in and
+  // out rather than switching at a hard edge. Same scale as the prior, so the
+  // restricted curve sits under it and its share of the area is the odds.
+  const priorYs = hasPrior
+    ? xs.map((x) => normPdf((x - priorMu!) / priorSigma!))
+    : null;
+  let priorPeak = 0;
+  if (priorYs) for (const y of priorYs) priorPeak = Math.max(priorPeak, y);
+  const slotYs = (gap: number | null) => {
+    if (!board || !priorYs || gap === null || gap > cardCount) return null;
+    const w = board.gapGivenX[gap];
+    return xs.map((x, i) => {
+      const idx = Math.round((x - board.grid[0]) / board.step);
+      const j = Math.max(0, Math.min(board.grid.length - 1, idx));
+      return priorYs[i] * w[j];
+    });
+  };
+  const bestYs = slotYs(bestGap);
+  const hoverYs = hoverGap === bestGap ? bestYs : slotYs(hoverGap);
+  const priorCurve = priorYs
+    ? linePath(xs, priorYs, toX, CHART_HEIGHT, curveHeight, false, priorPeak)
     : "";
 
+  const focusGap = hoverGap ?? bestGap;
   const neighbours =
-    selectedGap !== null
-      ? new Set([selectedGap - 1, selectedGap])
-      : new Set<number>();
+    focusGap !== null ? new Set([focusGap - 1, focusGap]) : new Set<number>();
 
   const ticks = niceTicks(
     domain[0],
@@ -534,13 +534,15 @@ export default function BayesPanel(props: Props) {
       ) : null}
       <div className={styles.readout}>
         <div>
-          {!revealed ? <span className={styles.guessSwatch} /> : null}
-          {priorLine}
+          {firstSwatch ? <span className={firstSwatch} /> : null}
+          {firstLine}
         </div>
-        <div>
-          {!revealed ? <span className={styles.mixSwatch} /> : null}
-          {posteriorLine}
-        </div>
+        {secondLine ? (
+          <div>
+            {secondSwatch ? <span className={secondSwatch} /> : null}
+            {secondLine}
+          </div>
+        ) : null}
       </div>
       <div
         className={styles.chartBox}
@@ -566,55 +568,55 @@ export default function BayesPanel(props: Props) {
           >
             {/* Soft gap bands: opacity = P(gap | card at this year) */}
             <defs>
-              {priorBand ? (
+              {bestBand ? (
                 <linearGradient
-                  id="bayes-prior-band"
+                  id="bayes-best-band"
                   x1="0"
                   x2="1"
                   y1="0"
                   y2="0"
                 >
-                  {priorBand.map((st) => (
-                    <stop
-                      key={st.offset}
-                      offset={st.offset}
-                      stopColor={styles.guessColor}
-                      stopOpacity={0.2 * st.o}
-                    />
-                  ))}
-                </linearGradient>
-              ) : null}
-              {selectedBand ? (
-                <linearGradient
-                  id="bayes-selected-band"
-                  x1="0"
-                  x2="1"
-                  y1="0"
-                  y2="0"
-                >
-                  {selectedBand.map((st) => (
+                  {bestBand.map((st) => (
                     <stop
                       key={st.offset}
                       offset={st.offset}
                       stopColor={styles.mixColor}
-                      stopOpacity={0.18 * st.o}
+                      stopOpacity={0.16 * st.o}
+                    />
+                  ))}
+                </linearGradient>
+              ) : null}
+              {hoverBand ? (
+                <linearGradient
+                  id="bayes-hover-band"
+                  x1="0"
+                  x2="1"
+                  y1="0"
+                  y2="0"
+                >
+                  {hoverBand.map((st) => (
+                    <stop
+                      key={st.offset}
+                      offset={st.offset}
+                      stopColor="currentColor"
+                      stopOpacity={0.1 * st.o}
                     />
                   ))}
                 </linearGradient>
               ) : null}
             </defs>
-            {priorBand ? (
+            {bestBand ? (
               <rect
-                fill="url(#bayes-prior-band)"
+                fill="url(#bayes-best-band)"
                 height={CHART_HEIGHT}
                 width={plotWidth}
                 x={MARGIN_LEFT}
                 y={0}
               />
             ) : null}
-            {selectedBand ? (
+            {hoverBand ? (
               <rect
-                fill="url(#bayes-selected-band)"
+                fill="url(#bayes-hover-band)"
                 height={CHART_HEIGHT}
                 width={plotWidth}
                 x={MARGIN_LEFT}
@@ -667,34 +669,57 @@ export default function BayesPanel(props: Props) {
               />
             ))}
             {/* Posterior predictive for the selected gap */}
-            {summary && !revealed ? (
+            {/* Best guess: the prior restricted to its most likely slot */}
+            {bestYs ? (
               <>
                 <path
                   d={linePath(
-                    summary.xs,
-                    summary.density,
+                    xs,
+                    bestYs,
                     toX,
                     CHART_HEIGHT,
                     curveHeight,
                     true,
+                    priorPeak,
                   )}
                   fill={styles.mixColor}
-                  fillOpacity={0.2}
+                  fillOpacity={0.25}
                 />
                 <path
                   d={linePath(
-                    summary.xs,
-                    summary.density,
+                    xs,
+                    bestYs,
                     toX,
                     CHART_HEIGHT,
                     curveHeight,
                     false,
+                    priorPeak,
                   )}
                   fill="none"
                   stroke={styles.mixColor}
                   strokeWidth={2}
                 />
               </>
+            ) : null}
+            {/* Current selection: the prior restricted to the slot under the
+                card; over the best slot it is the same curve */}
+            {hoverYs ? (
+              <path
+                d={linePath(
+                  xs,
+                  hoverYs,
+                  toX,
+                  CHART_HEIGHT,
+                  curveHeight,
+                  false,
+                  priorPeak,
+                )}
+                fill="none"
+                stroke="currentColor"
+                strokeDasharray="5 4"
+                strokeOpacity={0.85}
+                strokeWidth={2}
+              />
             ) : null}
             {priorCurve && !revealed ? (
               <path
