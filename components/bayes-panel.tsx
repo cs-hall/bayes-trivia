@@ -2,11 +2,9 @@ import React from "react";
 import { formatYear, normPdf, parseYear } from "../lib/gap-odds";
 import {
   HiddenBoard,
-  HiddenDecisionMap,
   hiddenGapProbabilities,
   MAX_YEAR,
   PRIOR_SIGMA_MAX,
-  summariseHiddenGap,
 } from "../lib/hidden-posterior";
 import * as styles from "../styles/gap-odds-panel.css";
 import { vars } from "../styles/theme.css";
@@ -29,7 +27,6 @@ interface Props {
   canReveal: boolean;
   dragGap: number | null;
   latestIndex: number | null;
-  map: HiddenDecisionMap | null;
   nudge: number;
   onConfirmFirstCard: () => void;
   onOpenChange: (open: boolean) => void;
@@ -79,9 +76,11 @@ function linePath(
   baseline: number,
   height: number,
   closed: boolean,
+  /** Scale against this peak instead of the curve's own maximum. */
+  fixedPeak?: number,
 ) {
-  let peak = 0;
-  for (const y of ys) peak = Math.max(peak, y);
+  let peak = fixedPeak ?? 0;
+  if (fixedPeak === undefined) for (const y of ys) peak = Math.max(peak, y);
   if (!(peak > 0)) return "";
   const pts = xs.map(
     (x, i) =>
@@ -109,7 +108,6 @@ export default function BayesPanel(props: Props) {
     canReveal,
     dragGap,
     latestIndex,
-    map,
     nudge,
     onConfirmFirstCard,
     onOpenChange,
@@ -166,22 +164,10 @@ export default function BayesPanel(props: Props) {
     ? priorProbs.reduce((b, p, i, arr) => (p > arr[b] ? i : b), 0)
     : null;
   // Best guess: the prior's most likely slot. Selection: the slot under the
-  // dragged card. Both curves come from the same calculation, so over the
-  // best slot the selection curve lies exactly on the best-guess curve.
+  // dragged card. Both are drawn as "prior restricted to the slot", so over
+  // the best slot the selection curve lies exactly on the best-guess curve.
   const bestGap = revealed ? null : priorBest;
   const hoverGap = revealed ? null : dragGap;
-
-  const bestSummary = React.useMemo(() => {
-    if (!board || !map || bestGap === null || bestGap > cardCount) return null;
-    return summariseHiddenGap(board, map, bestGap, SAMPLE_COUNT);
-  }, [board, map, bestGap, cardCount]);
-  const hoverSummary = React.useMemo(() => {
-    if (!board || !map || hoverGap === null || hoverGap > cardCount) {
-      return null;
-    }
-    if (hoverGap === bestGap) return bestSummary;
-    return summariseHiddenGap(board, map, hoverGap, SAMPLE_COUNT);
-  }, [board, map, hoverGap, bestGap, bestSummary, cardCount]);
 
   // Axis: the board's posteriors (or a default span before the first card),
   // widened to take in the prior. At the reveal it also takes in every true year.
@@ -420,15 +406,28 @@ export default function BayesPanel(props: Props) {
   const bestBand = bandStops(bestGap);
   const hoverBand = hoverGap !== bestGap ? bandStops(hoverGap) : null;
 
-  const priorCurve = hasPrior
-    ? linePath(
-        xs,
-        xs.map((x) => normPdf((x - priorMu!) / priorSigma!)),
-        toX,
-        CHART_HEIGHT,
-        curveHeight,
-        false,
-      )
+  // Prior, and the prior restricted to a slot: prior(x) · P(slot | card at x).
+  // The slot's edges are other cards' posteriors, so P(slot | x) fades in and
+  // out rather than switching at a hard edge. Same scale as the prior, so the
+  // restricted curve sits under it and its share of the area is the odds.
+  const priorYs = hasPrior
+    ? xs.map((x) => normPdf((x - priorMu!) / priorSigma!))
+    : null;
+  let priorPeak = 0;
+  if (priorYs) for (const y of priorYs) priorPeak = Math.max(priorPeak, y);
+  const slotYs = (gap: number | null) => {
+    if (!board || !priorYs || gap === null || gap > cardCount) return null;
+    const w = board.gapGivenX[gap];
+    return xs.map((x, i) => {
+      const idx = Math.round((x - board.grid[0]) / board.step);
+      const j = Math.max(0, Math.min(board.grid.length - 1, idx));
+      return priorYs[i] * w[j];
+    });
+  };
+  const bestYs = slotYs(bestGap);
+  const hoverYs = hoverGap === bestGap ? bestYs : slotYs(hoverGap);
+  const priorCurve = priorYs
+    ? linePath(xs, priorYs, toX, CHART_HEIGHT, curveHeight, false, priorPeak)
     : "";
 
   const focusGap = hoverGap ?? bestGap;
@@ -670,29 +669,31 @@ export default function BayesPanel(props: Props) {
               />
             ))}
             {/* Posterior predictive for the selected gap */}
-            {/* Best guess: the prior's most likely slot */}
-            {bestSummary ? (
+            {/* Best guess: the prior restricted to its most likely slot */}
+            {bestYs ? (
               <>
                 <path
                   d={linePath(
-                    bestSummary.xs,
-                    bestSummary.density,
+                    xs,
+                    bestYs,
                     toX,
                     CHART_HEIGHT,
                     curveHeight,
                     true,
+                    priorPeak,
                   )}
                   fill={styles.mixColor}
-                  fillOpacity={0.2}
+                  fillOpacity={0.25}
                 />
                 <path
                   d={linePath(
-                    bestSummary.xs,
-                    bestSummary.density,
+                    xs,
+                    bestYs,
                     toX,
                     CHART_HEIGHT,
                     curveHeight,
                     false,
+                    priorPeak,
                   )}
                   fill="none"
                   stroke={styles.mixColor}
@@ -700,17 +701,18 @@ export default function BayesPanel(props: Props) {
                 />
               </>
             ) : null}
-            {/* Current selection: same calculation for the slot under the
-                card, so over the best slot it lies exactly on the blue curve */}
-            {hoverSummary ? (
+            {/* Current selection: the prior restricted to the slot under the
+                card; over the best slot it is the same curve */}
+            {hoverYs ? (
               <path
                 d={linePath(
-                  hoverSummary.xs,
-                  hoverSummary.density,
+                  xs,
+                  hoverYs,
                   toX,
                   CHART_HEIGHT,
                   curveHeight,
                   false,
+                  priorPeak,
                 )}
                 fill="none"
                 stroke="currentColor"

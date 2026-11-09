@@ -10,7 +10,6 @@ import { parseYear } from "../lib/gap-odds";
 import { HiddenDatesContext } from "../lib/hidden-dates-context";
 import {
   buildHiddenBoard,
-  buildHiddenDecisionMap,
   Prior,
   PRIOR_SIGMA_MAX,
   PRIOR_SIGMA_MIN,
@@ -739,7 +738,7 @@ export default function Board(props: Props) {
         card.played.prior ?? { mu: fallbackMu, sigma: VAGUE_PRIOR_SIGMA },
     );
     const board = buildHiddenBoard(priors);
-    return { board, map: buildHiddenDecisionMap(board) };
+    return { board };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [priorsKey]);
 
@@ -818,7 +817,6 @@ export default function Board(props: Props) {
             }
             dragGap={isDragging ? previewIndex : null}
             latestIndex={latestIndex}
-            map={hidden?.map ?? null}
             nudge={priorNudge}
             onConfirmFirstCard={() => {
               if (state.next && currentPrior)
