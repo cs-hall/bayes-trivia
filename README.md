@@ -2,6 +2,8 @@
 
 Bayes-trivia is a fork of [Wikitrivia](https://github.com/tom-james-watson/wikitrivia) by Tom James Watson (MIT licence). Dates stay hidden: you give each card a prior (year ± years), the game only tells you the order, and every card's posterior is updated from that order after each placement. A panel shows the best gap for your prior and the best guess for the card's year implied by choosing the gap you're dragging over.
 
+A multiplayer version is being designed: see [docs/multiplayer.md](docs/multiplayer.md).
+
 ## Original README
 
 Wikitrivia is a year-based timeline trivia game built from Wikimedia data.
