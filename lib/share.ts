@@ -51,22 +51,6 @@ export function getShareResults(played: PlayedCard[]): boolean[] {
     .map(({ item }) => item.played.correct);
 }
 
-export function getRankLabel(score: number): string {
-  if (score >= 20) {
-    return "Gold";
-  }
-
-  if (score >= 10) {
-    return "Silver";
-  }
-
-  if (score >= 1) {
-    return "Bronze";
-  }
-
-  return "None";
-}
-
 function buildResultRow(results?: boolean[]): string | null {
   if (!results || results.length === 0) {
     return null;
@@ -128,7 +112,7 @@ export function buildShareText(args: {
       lines.push("", resultRow);
     }
 
-    lines.push("", `Score / ${score} / ${getRankLabel(score)}`, "", url);
+    lines.push("", `Score ${score}`, "", url);
     return lines.join("\n");
   }
 
@@ -146,10 +130,10 @@ export function buildShareText(args: {
     lines.push("", resultRow);
   }
 
-  lines.push("", `Score / ${score} / ${getRankLabel(score)}`);
+  lines.push("", `Score ${score}`);
 
   if (typeof highscore === "number") {
-    lines.push(`Best / ${highscore} / ${getRankLabel(highscore)}`);
+    lines.push(`Best ${highscore}`);
   }
 
   lines.push("", url);

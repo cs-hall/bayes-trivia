@@ -1,6 +1,7 @@
 import classNames from "classnames";
 import { AnimatePresence, motion } from "motion/react";
 import React from "react";
+import { CalibrationRecord, loadHistory, recordGame } from "../lib/calibration";
 import {
   checkCorrect,
   drawNextCard,
@@ -858,6 +859,37 @@ export default function Board(props: Props) {
     };
   }, [bounds, focusedId, handleCardTap, hidden, revealed, state.played]);
 
+  // Calibration: this game's cards with a prior, and every card scored on
+  // this device. A finished game is recorded once.
+  const calibrationRecords = React.useMemo<CalibrationRecord[]>(() => {
+    if (!revealed) return [];
+    return state.played.flatMap((card) =>
+      card.played.prior
+        ? [
+            {
+              max: Number.isFinite(bounds.max) ? bounds.max : null,
+              min: Number.isFinite(bounds.min) ? bounds.min : null,
+              mu: card.played.prior.mu,
+              sigma: card.played.prior.sigma,
+              year: card.year,
+            },
+          ]
+        : [],
+    );
+  }, [bounds, revealed, state.played]);
+  const gameKey = state.played.map((card) => card.id).join("|");
+  const [calibrationHistory, setCalibrationHistory] = React.useState<
+    CalibrationRecord[]
+  >([]);
+  React.useEffect(() => {
+    if (!revealed) return;
+    setCalibrationHistory(
+      calibrationRecords.length > 0
+        ? recordGame(gameKey, calibrationRecords)
+        : loadHistory(),
+    );
+  }, [calibrationRecords, gameKey, revealed]);
+
   const handleReveal = React.useCallback(() => {
     if (isPlacementSettling || state.lives <= 0) return;
     setState({ ...state, lives: 0 });
@@ -896,6 +928,7 @@ export default function Board(props: Props) {
         ref={boardRef}
         className={classNames(styles.wrapper, {
           [styles.wrapperWithOdds]: gapOddsExpanded,
+          [styles.wrapperRevealed]: revealed && showGameOverSummary,
         })}
       >
         {showPanel && gapOddsExpanded && hidden ? (
@@ -952,6 +985,7 @@ export default function Board(props: Props) {
           className={classNames(styles.top, {
             [styles.topGameOver]: showGameOverSummary,
             [styles.topWithOdds]: gapOddsExpanded,
+            [styles.topRevealed]: revealed && showGameOverSummary,
           })}
         >
           <div className={styles.statusArea}>
@@ -981,6 +1015,8 @@ export default function Board(props: Props) {
                     dailyDateKey={dailyDateKey}
                     difficulty={difficulty}
                     gameMode={gameMode}
+                    calibrationHistory={calibrationHistory}
+                    calibrationRecords={calibrationRecords}
                     highscore={highscore}
                     played={state.played}
                     resetGame={resetGame}
@@ -1033,6 +1069,7 @@ export default function Board(props: Props) {
           layoutScroll={timelineLayoutAnimationsEnabled}
           className={classNames(styles.bottom, {
             [styles.bottomWithOdds]: gapOddsExpanded,
+            [styles.bottomRevealed]: revealed && showGameOverSummary,
           })}
         >
           <PlayedItemList

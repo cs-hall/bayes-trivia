@@ -88,7 +88,15 @@ export default function TimelineLeaderLines(props: Props) {
         hideAll();
         return;
       }
-      const rootRect = root.getBoundingClientRect();
+      // Work in the board's content coordinates: the board scrolls on the
+      // final screen, and this overlay scrolls with its content.
+      const viewRect = root.getBoundingClientRect();
+      const rootRect = {
+        left: viewRect.left - root.scrollLeft,
+        top: viewRect.top - root.scrollTop,
+        width: Math.max(viewRect.width, root.scrollWidth),
+        height: Math.max(viewRect.height, root.scrollHeight),
+      };
       const chartRect = chartAxis.getBoundingClientRect();
       const lo = Number(chartAxis.dataset.lo);
       const hi = Number(chartAxis.dataset.hi);
