@@ -480,3 +480,26 @@ export function summariseHiddenGap(
     xs,
   };
 }
+
+/**
+ * Log score of a prior at the true year: the natural log of the probability
+ * the prior gave to that exact (whole) year, i.e. its N(mu, sigma) mass on
+ * [year - 1/2, year + 1/2], renormalised to the known year bounds. Higher
+ * (closer to 0) is better; a confident miss scores very low.
+ */
+export function priorLogScore(
+  prior: Prior,
+  year: number,
+  bounds: YearBounds = DEFAULT_BOUNDS,
+): number {
+  const s = Math.max(prior.sigma, PRIOR_SIGMA_MIN);
+  const cdf = (x: number) => normCdf((x - prior.mu) / s);
+  const lo = Number.isFinite(bounds.min) ? cdf(bounds.min - 0.5) : 0;
+  const hi = cdf(bounds.max + 0.5);
+  const inside = hi - lo;
+  const mass = cdf(year + 0.5) - cdf(year - 0.5);
+  if (inside > 0 && mass > 0) return Math.log(mass / inside);
+  // Underflow far in the tail: the log of the normal density is exact enough.
+  const z = (year - prior.mu) / s;
+  return -0.5 * z * z - Math.log(s * Math.sqrt(2 * Math.PI));
+}
