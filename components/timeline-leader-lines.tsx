@@ -13,7 +13,7 @@ interface Props {
   /**
    * After the reveal: each card's true year. The bent axis then uses the
    * true years, and each card gets two lines: grey to its posterior median,
-   * orange to its true year.
+   * sage to its true year.
    */
   trueYears?: number[] | null;
 }
@@ -48,7 +48,7 @@ export default function TimelineLeaderLines(props: Props) {
   const labelsRef = React.useRef<SVGGElement | null>(null);
   const pathRefs = React.useRef<Array<SVGPathElement | null>>([]);
   const dotRefs = React.useRef<Array<SVGCircleElement | null>>([]);
-  // Reveal only: the orange true-year lines and dots.
+  // Reveal only: the sage true-year lines and dots.
   const truePathRefs = React.useRef<Array<SVGPathElement | null>>([]);
   const trueDotRefs = React.useRef<Array<SVGCircleElement | null>>([]);
   const dataRef = React.useRef({ ids, medians, trueYears });
@@ -239,7 +239,7 @@ export default function TimelineLeaderLines(props: Props) {
           c.median,
           offscreen,
         );
-        // Orange (reveal only): to the true year.
+        // Sage (reveal only): to the true year.
         if (c.trueYear !== null) {
           drawLine(
             truePathRefs.current[c.i],
