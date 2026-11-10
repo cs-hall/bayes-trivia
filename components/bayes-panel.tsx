@@ -2,10 +2,12 @@ import React from "react";
 import { formatYear, normPdf, parseYear } from "../lib/gap-odds";
 import {
   HiddenBoard,
+  Prior,
   YearBounds,
   hiddenGapProbabilities,
   MAX_YEAR,
   PRIOR_SIGMA_MAX,
+  priorMassOnGrid,
 } from "../lib/hidden-posterior";
 import * as styles from "../styles/gap-odds-panel.css";
 import { vars } from "../styles/theme.css";
@@ -21,6 +23,21 @@ const HANDLE_RADIUS = 6;
 const HANDLE_HIT = 22;
 const SAMPLE_COUNT = 320;
 const BAND_COLUMNS = 160;
+/** Narrowest zoom, in years. */
+const MIN_SPAN = 10;
+const POSTERIOR_HEIGHT = 0.55;
+
+export interface PreviousBoard {
+  board: HiddenBoard;
+  /** For each current card, its index on the previous board (null: new). */
+  indexMap: (null | number)[];
+  latestPrior: null | Prior;
+}
+
+export interface HistoryStep {
+  board: HiddenBoard;
+  index: number;
+}
 
 interface Props {
   awaitingFirstCard: boolean;
@@ -29,8 +46,11 @@ interface Props {
   bounds: YearBounds;
   canReveal: boolean;
   dragGap: number | null;
+  /** At the end: the tapped card's posterior after each placement. */
+  focusedHistory: HistoryStep[] | null;
   /** Placed card the player tapped: its posterior is highlighted. */
   focusedIndex: number | null;
+  focusedPrior: null | Prior;
   focusedTitle: null | string;
   latestIndex: number | null;
   nudge: number;
@@ -40,6 +60,8 @@ interface Props {
   onSigmaTextChange: (value: string) => void;
   onYearTextChange: (value: string) => void;
   open: boolean;
+  /** The board before the latest placement. */
+  previous: null | PreviousBoard;
   revealed: boolean;
   sigmaText: string;
   trueYears: number[] | null;
@@ -98,13 +120,65 @@ function linePath(
   ).toFixed(1)},${baseline}Z`;
 }
 
+/** Keep a zoomed view inside the full span; null means not zoomed. */
+function clampView(
+  view: [number, number] | null,
+  full: [number, number],
+): [number, number] | null {
+  if (!view) return null;
+  const fullSpan = full[1] - full[0];
+  const span = Math.max(
+    Math.min(view[1] - view[0], fullSpan),
+    Math.min(MIN_SPAN, fullSpan),
+  );
+  if (!(span < fullSpan * 0.999)) return null;
+  const lo = Math.max(full[0], Math.min(view[0], full[1] - span));
+  return [lo, lo + span];
+}
+
+/** The area under `before` that `now` no longer covers. */
+function lostPath(
+  xs: number[],
+  before: number[],
+  now: number[],
+  toX: (v: number) => number,
+  baseline: number,
+  height: number,
+  peak: number,
+) {
+  if (!(peak > 0)) return "";
+  const y = (v: number) => (baseline - (v / peak) * height).toFixed(1);
+  const top = xs.map((x, i) => `${toX(x).toFixed(1)},${y(before[i])}`);
+  const bottom = xs
+    .map((x, i) => `${toX(x).toFixed(1)},${y(Math.min(before[i], now[i]))}`)
+    .reverse();
+  return `M${top.join("L")}L${bottom.join("L")}Z`;
+}
+
+function maxOf(...arrays: (number[] | null)[]) {
+  let peak = 0;
+  for (const arr of arrays)
+    if (arr) for (const v of arr) peak = Math.max(peak, v);
+  return peak;
+}
+
 /** Sample a grid-mass array at display xs (as a density). */
 function sampleGrid(board: HiddenBoard, mass: Float64Array, xs: number[]) {
   const { grid, step } = board;
+  // Linear between bin centres, so zoomed-in curves stay smooth.
   return xs.map((x) => {
-    const idx = Math.round((x - grid[0]) / step);
-    return idx < 0 || idx >= grid.length ? 0 : mass[idx];
+    const t = (x - grid[0]) / step;
+    const i = Math.floor(t);
+    if (i < -1 || i >= grid.length) return 0;
+    const a = i >= 0 ? mass[i] : 0;
+    const b = i + 1 < grid.length ? mass[i + 1] : 0;
+    return a + (b - a) * (t - i);
   });
+}
+
+/** Density per year at xs, comparable across boards with different grids. */
+function densityAt(board: HiddenBoard, mass: Float64Array, xs: number[]) {
+  return sampleGrid(board, mass, xs).map((v) => v / board.step);
 }
 
 export default function BayesPanel(props: Props) {
@@ -114,7 +188,9 @@ export default function BayesPanel(props: Props) {
     bounds,
     canReveal,
     dragGap,
+    focusedHistory,
     focusedIndex,
+    focusedPrior,
     focusedTitle,
     latestIndex,
     nudge,
@@ -124,6 +200,7 @@ export default function BayesPanel(props: Props) {
     onSigmaTextChange,
     onYearTextChange,
     open,
+    previous,
     revealed,
     sigmaText,
     trueYears,
@@ -140,10 +217,32 @@ export default function BayesPanel(props: Props) {
     [number, number] | null
   >(null);
   const dragRef = React.useRef<null | {
-    mode: "mean" | "sd";
+    mode: "mean" | "pan" | "sd";
     offset: number;
     pointerId: number;
+    startPx: number;
+    startView: [number, number];
   }>(null);
+  // Zoomed view (years), or null for the whole timeline.
+  const [zoom, setZoom] = React.useState<[number, number] | null>(null);
+  const pointersRef = React.useRef(new Map<number, number>());
+  const pinchRef = React.useRef<null | {
+    ids: [number, number];
+    y1: number;
+    y2: number;
+  }>(null);
+  // The prior before a tap, restored if the tap turns out to be a pinch.
+  const savedPriorRef = React.useRef<null | { sigma: string; year: string }>(
+    null,
+  );
+  const [svgNode, setSvgNode] = React.useState<SVGSVGElement | null>(null);
+  const wheelRef = React.useRef<(event: WheelEvent) => void>(() => {});
+  React.useEffect(() => {
+    if (!svgNode) return;
+    const handler = (event: WheelEvent) => wheelRef.current(event);
+    svgNode.addEventListener("wheel", handler, { passive: false });
+    return () => svgNode.removeEventListener("wheel", handler);
+  }, [svgNode]);
 
   const cardCount = board?.posteriors.length ?? 0;
   React.useEffect(() => {
@@ -207,7 +306,9 @@ export default function BayesPanel(props: Props) {
     const pad = (hi - lo) * 0.04;
     liveDomain = [lo - pad, hi + pad];
   }
-  const domain = frozenDomain ?? liveDomain;
+  const fullDomain = frozenDomain ?? liveDomain;
+  const zoomedView = clampView(zoom, fullDomain);
+  const domain = zoomedView ?? fullDomain;
   const plotWidth = Math.max(0, width - MARGIN_LEFT - MARGIN_RIGHT);
   const toX = (year: number) =>
     MARGIN_LEFT + ((year - domain[0]) / (domain[1] - domain[0])) * plotWidth;
@@ -226,6 +327,51 @@ export default function BayesPanel(props: Props) {
     if (!board) return [];
     return board.marginals.map((m) => sampleGrid(board, m, xs));
   }, [board, xs]);
+
+  // After a placement, until the next prior is set: how every card's
+  // posterior moved, on a shared density scale per card.
+  const showShift =
+    !revealed &&
+    previous !== null &&
+    board !== null &&
+    priorMu === null &&
+    dragGap === null &&
+    focusedIndex === null;
+  const shiftCurves = React.useMemo(() => {
+    if (!showShift || !board || !previous) return null;
+    return board.marginals.map((mass, i) => {
+      const now = densityAt(board, mass, xs);
+      const p = previous.indexMap[i];
+      let before: number[] | null = null;
+      const isNew = p === null || p === undefined;
+      if (!isNew && previous.board.marginals[p]) {
+        before = densityAt(previous.board, previous.board.marginals[p], xs);
+      } else if (isNew && previous.latestPrior) {
+        before = densityAt(
+          board,
+          priorMassOnGrid(board, previous.latestPrior),
+          xs,
+        );
+      }
+      if (!before) return null;
+      return { before, isNew, now, peak: maxOf(before, now) };
+    });
+  }, [showShift, board, previous, xs]);
+
+  // At the end, for the tapped card: its prior and every posterior since.
+  const historyCurves = React.useMemo(() => {
+    if (!revealed || !focusedHistory || focusedHistory.length === 0) {
+      return null;
+    }
+    const steps = focusedHistory.map((step) =>
+      densityAt(step.board, step.board.marginals[step.index], xs),
+    );
+    const last = focusedHistory[focusedHistory.length - 1].board;
+    const prior = focusedPrior
+      ? densityAt(last, priorMassOnGrid(last, focusedPrior), xs)
+      : null;
+    return { peak: maxOf(prior, ...steps), prior, steps };
+  }, [revealed, focusedHistory, focusedPrior, xs]);
 
   if (!open) {
     return (
@@ -272,9 +418,86 @@ export default function BayesPanel(props: Props) {
     };
   };
 
+  // ---- Zoom ---------------------------------------------------------------
+  const span = domain[1] - domain[0];
+  const zoomAround = (factor: number, year: number) => {
+    const lo = year - (year - domain[0]) * factor;
+    const hi = year + (domain[1] - year) * factor;
+    setZoom(clampView([lo, hi], fullDomain));
+  };
+  const panBy = (years: number) => {
+    if (!zoomedView) return;
+    setZoom(clampView([domain[0] + years, domain[1] + years], fullDomain));
+  };
+  // Buttons zoom around the prior (or the tapped card) when it's in view.
+  const zoomCentre = () => {
+    const inView = (y: number) => y >= domain[0] && y <= domain[1];
+    if (focusedIndex !== null && board?.posteriors[focusedIndex]) {
+      const m = board.posteriors[focusedIndex].median;
+      if (inView(m)) return m;
+    }
+    if (hasPrior && !revealed && inView(priorMu!)) return priorMu!;
+    if (latestIndex !== null && board?.posteriors[latestIndex] && !revealed) {
+      const m = board.posteriors[latestIndex].median;
+      if (inView(m)) return m;
+    }
+    return (domain[0] + domain[1]) / 2;
+  };
+  wheelRef.current = (event: WheelEvent) => {
+    if (!svgNode || plotWidth <= 0) return;
+    const px = event.clientX - svgNode.getBoundingClientRect().left;
+    // Pinch on a trackpad (or ctrl + wheel) zooms; plain scrolling still
+    // scrolls the page.
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      const delta = Math.max(-60, Math.min(60, event.deltaY));
+      zoomAround(Math.exp(delta * 0.01), fromX(px));
+      return;
+    }
+    const sideways = event.shiftKey ? event.deltaY : event.deltaX;
+    if (zoomedView && Math.abs(sideways) > Math.abs(event.deltaY) * 0.5) {
+      event.preventDefault();
+      panBy((sideways / plotWidth) * span);
+    }
+  };
+
   const handlePointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (revealed || plotWidth <= 0) return;
+    if (plotWidth <= 0) return;
     const { px, py } = pointerYear(event);
+    const pointers = pointersRef.current;
+    pointers.set(event.pointerId, px);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    if (pointers.size === 2) {
+      // A second finger: pinch to zoom. Undo what the first one did.
+      const drag = dragRef.current;
+      if (drag && drag.mode !== "pan" && savedPriorRef.current) {
+        onYearTextChange(savedPriorRef.current.year);
+        onSigmaTextChange(savedPriorRef.current.sigma);
+      }
+      dragRef.current = null;
+      setFrozenDomain(null);
+      const [a, b] = [...pointers.entries()];
+      pinchRef.current = {
+        ids: [a[0], b[0]],
+        y1: fromX(a[1]),
+        y2: fromX(b[1]),
+      };
+      return;
+    }
+    if (pointers.size > 2) return;
+    const base = {
+      offset: 0,
+      pointerId: event.pointerId,
+      startPx: px,
+      startView: domain,
+    };
+    // Drag the year axis (or anywhere, once revealed) to pan a zoomed view.
+    if (revealed || (zoomedView && py > CHART_HEIGHT)) {
+      dragRef.current = { ...base, mode: "pan" };
+      return;
+    }
+    savedPriorRef.current = { sigma: sigmaText, year: yearText };
     let mode: "mean" | "sd" = "mean";
     let offset = 0;
     if (hasPrior) {
@@ -291,21 +514,46 @@ export default function BayesPanel(props: Props) {
       }
     }
     if (mode === "mean") setMean(fromX(px) + offset);
-    dragRef.current = { mode, offset, pointerId: event.pointerId };
-    setFrozenDomain(domain);
-    event.currentTarget.setPointerCapture(event.pointerId);
-    event.preventDefault();
+    dragRef.current = { ...base, mode, offset };
+    setFrozenDomain(fullDomain);
   };
 
   const handlePointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+    const pointers = pointersRef.current;
+    if (!pointers.has(event.pointerId)) return;
+    const { px } = pointerYear(event);
+    pointers.set(event.pointerId, px);
+    const pinch = pinchRef.current;
+    if (pinch) {
+      const x1 = pointers.get(pinch.ids[0]);
+      const x2 = pointers.get(pinch.ids[1]);
+      if (x1 === undefined || x2 === undefined) return;
+      // Keep the years under each finger under that finger.
+      if (Math.abs(x2 - x1) < 16) return;
+      const perPx = (pinch.y2 - pinch.y1) / (x2 - x1);
+      if (!(perPx > 0)) return;
+      const lo = pinch.y1 - (x1 - MARGIN_LEFT) * perPx;
+      setZoom(clampView([lo, lo + plotWidth * perPx], fullDomain));
+      return;
+    }
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
-    const year = fromX(pointerYear(event).px);
+    if (drag.mode === "pan") {
+      const [lo, hi] = drag.startView;
+      const years = ((drag.startPx - px) / plotWidth) * (hi - lo);
+      if (zoomedView) setZoom(clampView([lo + years, hi + years], fullDomain));
+      return;
+    }
+    const year = fromX(px);
     if (drag.mode === "mean") setMean(year + drag.offset);
     else if (priorMu !== null) setSd(Math.abs(year - priorMu));
   };
 
   const endDrag = (event: React.PointerEvent<SVGSVGElement>) => {
+    pointersRef.current.delete(event.pointerId);
+    if (pinchRef.current?.ids.includes(event.pointerId)) {
+      pinchRef.current = null;
+    }
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     dragRef.current = null;
@@ -492,7 +740,11 @@ export default function BayesPanel(props: Props) {
   ) : null;
 
   return (
-    <section aria-label="Bayes panel" className={styles.panel}>
+    <section
+      aria-label="Bayes panel"
+      className={styles.panel}
+      data-bayes-panel=""
+    >
       {!revealed ? (
         <div className={styles.headerRow}>
           <label className={styles.strong} htmlFor="bayes-prior-year">
@@ -583,7 +835,7 @@ export default function BayesPanel(props: Props) {
         ) : null}
       </div>
       {/* Legend for the line curves (the filled ones are keyed in the text above) */}
-      {(!revealed && !awaitingFirstCard) || board ? (
+      {(!revealed && !awaitingFirstCard) || board || hasPrior ? (
         <div className={styles.legend}>
           {!revealed ? (
             <span>
@@ -591,13 +843,73 @@ export default function BayesPanel(props: Props) {
               Prior (this card)
             </span>
           ) : null}
-          {board ? (
+          {board && !(revealed && historyCurves) ? (
             <span>
               <span className={styles.posteriorLineSwatch} />
               {revealed
                 ? "Card posteriors"
                 : "Card posteriors (updated each turn)"}
             </span>
+          ) : null}
+          {shiftCurves ? (
+            <span>
+              <span className={styles.lostSwatch} />
+              Ruled out by the last placement
+            </span>
+          ) : null}
+          {revealed && historyCurves ? (
+            <>
+              {historyCurves.prior ? (
+                <span>
+                  <span className={styles.priorLineSwatch} />
+                  Prior
+                </span>
+              ) : null}
+              {historyCurves.steps.length > 1 ? (
+                <span>
+                  <span className={styles.historySwatch} />
+                  After each placement
+                </span>
+              ) : null}
+              <span>
+                <span className={styles.finalLineSwatch} />
+                Final posterior
+              </span>
+            </>
+          ) : null}
+          {board || hasPrior ? (
+            <div className={styles.zoomControls}>
+              {zoomedView ? (
+                <button
+                  className={styles.zoomButton}
+                  onClick={() => setZoom(null)}
+                  title="Show the whole timeline"
+                  type="button"
+                >
+                  Fit
+                </button>
+              ) : null}
+              <button
+                aria-label="Zoom out"
+                className={styles.zoomButton}
+                disabled={!zoomedView}
+                onClick={() => zoomAround(2, zoomCentre())}
+                title="Zoom out"
+                type="button"
+              >
+                −
+              </button>
+              <button
+                aria-label="Zoom in"
+                className={styles.zoomButton}
+                disabled={span <= MIN_SPAN * 1.01}
+                onClick={() => zoomAround(0.5, zoomCentre())}
+                title="Zoom in (or pinch). Drag the years to pan."
+                type="button"
+              >
+                +
+              </button>
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -635,15 +947,24 @@ export default function BayesPanel(props: Props) {
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={endDrag}
+            ref={setSvgNode}
             role="img"
             style={{
-              cursor: revealed ? "default" : "pointer",
+              cursor: revealed ? (zoomedView ? "grab" : "default") : "pointer",
               touchAction: "none",
             }}
             width={width}
           >
             {/* Soft gap bands: opacity = P(gap | card at this year) */}
             <defs>
+              <clipPath id="bayes-plot-clip">
+                <rect
+                  height={BOX_HEIGHT}
+                  width={plotWidth + 8}
+                  x={MARGIN_LEFT - 4}
+                  y={0}
+                />
+              </clipPath>
               {bestBand ? (
                 <linearGradient
                   id="bayes-best-band"
@@ -708,15 +1029,67 @@ export default function BayesPanel(props: Props) {
               y2={CHART_HEIGHT}
             />
             {/* Card posteriors */}
-            {cardCurves.map((curve, i) =>
-              i === focusedIndex ? null : (
+            {cardCurves.map((curve, i) => {
+              if (i === focusedIndex) return null;
+              const shift = shiftCurves?.[i];
+              if (shift) {
+                const height = curveHeight * POSTERIOR_HEIGHT;
+                return (
+                  <g key={`c${i}`}>
+                    <path
+                      d={lostPath(
+                        xs,
+                        shift.before,
+                        shift.now,
+                        toX,
+                        CHART_HEIGHT,
+                        height,
+                        shift.peak,
+                      )}
+                      fill={styles.lostColor}
+                      fillOpacity={0.4}
+                    />
+                    <path
+                      d={linePath(
+                        xs,
+                        shift.before,
+                        toX,
+                        CHART_HEIGHT,
+                        height,
+                        false,
+                        shift.peak,
+                      )}
+                      fill="none"
+                      stroke={shift.isNew ? styles.guessColor : "currentColor"}
+                      strokeDasharray="3 3"
+                      strokeOpacity={shift.isNew ? 0.8 : 0.35}
+                    />
+                    <path
+                      d={linePath(
+                        xs,
+                        shift.now,
+                        toX,
+                        CHART_HEIGHT,
+                        height,
+                        false,
+                        shift.peak,
+                      )}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeOpacity={i === latestIndex ? 0.85 : 0.6}
+                      strokeWidth={i === latestIndex ? 1.5 : 1}
+                    />
+                  </g>
+                );
+              }
+              return (
                 <path
                   d={linePath(
                     xs,
                     curve,
                     toX,
                     CHART_HEIGHT,
-                    curveHeight * 0.55,
+                    curveHeight * POSTERIOR_HEIGHT,
                     false,
                   )}
                   fill="none"
@@ -735,8 +1108,8 @@ export default function BayesPanel(props: Props) {
                   }
                   strokeWidth={neighbours.has(i) ? 1.5 : 1}
                 />
-              ),
-            )}
+              );
+            })}
             {/* Posterior predictive for the selected gap */}
             {/* Best guess: the prior restricted to its most likely slot */}
             {bestYs ? (
@@ -807,21 +1180,77 @@ export default function BayesPanel(props: Props) {
                     focusedTitle && focusedTitle.length > 28
                       ? `${focusedTitle.slice(0, 27)}…`
                       : focusedTitle;
+                  const history = historyCurves;
+                  // At the end: prior (orange) → each update → final (dark),
+                  // all on one density scale. Otherwise just the posterior.
+                  const steps = history?.steps ?? [curve];
+                  const peak = history?.peak;
+                  const final = steps[steps.length - 1];
                   return (
                     <g>
                       <path
-                        d={linePath(xs, curve, toX, CHART_HEIGHT, height, true)}
+                        d={linePath(
+                          xs,
+                          final,
+                          toX,
+                          CHART_HEIGHT,
+                          height,
+                          true,
+                          peak,
+                        )}
                         fill="currentColor"
-                        fillOpacity={0.12}
+                        fillOpacity={0.1}
                       />
+                      {history?.prior ? (
+                        <path
+                          d={linePath(
+                            xs,
+                            history.prior,
+                            toX,
+                            CHART_HEIGHT,
+                            height,
+                            false,
+                            peak,
+                          )}
+                          fill="none"
+                          stroke={styles.guessColor}
+                          strokeWidth={2.5}
+                        />
+                      ) : null}
+                      {steps.slice(0, -1).map((ys, k) => {
+                        const orange = Math.round(
+                          100 * (1 - (k + 1) / steps.length),
+                        );
+                        return (
+                          <path
+                            d={linePath(
+                              xs,
+                              ys,
+                              toX,
+                              CHART_HEIGHT,
+                              height,
+                              false,
+                              peak,
+                            )}
+                            fill="none"
+                            key={`h${k}`}
+                            strokeOpacity={0.9}
+                            strokeWidth={1.25}
+                            style={{
+                              stroke: `color-mix(in srgb, ${styles.guessColor} ${orange}%, currentColor)`,
+                            }}
+                          />
+                        );
+                      })}
                       <path
                         d={linePath(
                           xs,
-                          curve,
+                          final,
                           toX,
                           CHART_HEIGHT,
                           height,
                           false,
+                          peak,
                         )}
                         fill="none"
                         stroke="currentColor"
@@ -863,39 +1292,41 @@ export default function BayesPanel(props: Props) {
               />
             ) : null}
             {/* Reveal: a bar from each card's posterior median to its true year */}
-            {board && revealed && trueYears
-              ? trueYears.map((year, i) => {
-                  const median = board.posteriors[i]?.median ?? year;
-                  const y = CHART_HEIGHT - 6 - (i % 5) * 7;
-                  return (
-                    <g key={`t${i}`}>
-                      <line
-                        stroke="currentColor"
-                        strokeOpacity={0.5}
-                        strokeWidth={1.5}
-                        x1={toX(median)}
-                        x2={toX(year)}
-                        y1={y}
-                        y2={y}
-                      />
-                      <circle
-                        cx={toX(median)}
-                        cy={y}
-                        fill={vars.color.backdropStrong}
-                        r={2.5}
-                        stroke="currentColor"
-                        strokeOpacity={0.7}
-                      />
-                      <circle
-                        cx={toX(year)}
-                        cy={y}
-                        fill={styles.guessColor}
-                        r={3}
-                      />
-                    </g>
-                  );
-                })
-              : null}
+            <g clipPath="url(#bayes-plot-clip)">
+              {board && revealed && trueYears
+                ? trueYears.map((year, i) => {
+                    const median = board.posteriors[i]?.median ?? year;
+                    const y = CHART_HEIGHT - 6 - (i % 5) * 7;
+                    return (
+                      <g key={`t${i}`}>
+                        <line
+                          stroke="currentColor"
+                          strokeOpacity={0.5}
+                          strokeWidth={1.5}
+                          x1={toX(median)}
+                          x2={toX(year)}
+                          y1={y}
+                          y2={y}
+                        />
+                        <circle
+                          cx={toX(median)}
+                          cy={y}
+                          fill={vars.color.backdropStrong}
+                          r={2.5}
+                          stroke="currentColor"
+                          strokeOpacity={0.7}
+                        />
+                        <circle
+                          cx={toX(year)}
+                          cy={y}
+                          fill={styles.guessColor}
+                          r={3}
+                        />
+                      </g>
+                    );
+                  })
+                : null}
+            </g>
             {priorControls ? (
               <g>
                 {/* ±1 SD bar with draggable ends */}
@@ -965,6 +1396,18 @@ export default function BayesPanel(props: Props) {
                   </>
                 ) : null}
               </g>
+            ) : null}
+            {zoomedView ? (
+              <rect
+                fill="currentColor"
+                fillOpacity={0.06}
+                height={BOX_HEIGHT - CHART_HEIGHT}
+                rx={3}
+                style={{ cursor: "grab" }}
+                width={plotWidth}
+                x={MARGIN_LEFT}
+                y={CHART_HEIGHT}
+              />
             ) : null}
             {ticks.map((year) => (
               <text

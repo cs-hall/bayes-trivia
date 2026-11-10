@@ -333,6 +333,14 @@ export function buildHiddenBoard(
 }
 
 /** Gap odds for a prior N(mu, sigma) on the current hidden board. */
+/** A prior as normalised mass on a board's grid, truncated to its bounds. */
+export function priorMassOnGrid(board: HiddenBoard, prior: Prior) {
+  const out = new Float64Array(board.grid.length);
+  binMass(board.grid, board.step, prior, out, board.bounds);
+  normaliseInPlace(out);
+  return out;
+}
+
 export function hiddenGapProbabilities(board: HiddenBoard, prior: Prior) {
   const { grid, step, gapGivenX } = board;
   const size = grid.length;

@@ -11,6 +11,7 @@ import { parseYear } from "../lib/gap-odds";
 import { HiddenDatesContext, RevealDetail } from "../lib/hidden-dates-context";
 import {
   buildHiddenBoard,
+  HiddenBoard,
   Prior,
   PRIOR_SIGMA_MAX,
   PRIOR_SIGMA_MIN,
@@ -26,6 +27,7 @@ import {
   intersectYearRange,
   useFreePlayYearRange,
 } from "../lib/use-free-play-year-range";
+import { PlayedCard } from "../types/cards";
 import { GameDifficulty, GameState } from "../types/game";
 import { PreparedCard } from "../types/game";
 import { GameMode, SelectionRoute } from "../types/routes";
@@ -50,6 +52,36 @@ const EDGE_SCROLL_THRESHOLD = 36;
 const EDGE_SCROLL_MAX_STEP = 10;
 
 const VAGUE_PRIOR_SIGMA = 1000;
+
+/** The board for these cards (in timeline order), with a vague stand-in
+ * prior for any card that has none. */
+function boardForCards(
+  cards: PlayedCard[],
+  bounds: ReturnType<typeof resolveBounds>,
+): HiddenBoard {
+  const known = cards
+    .map((card) => card.played.prior)
+    .filter((prior): prior is Prior => prior !== undefined);
+  const fallbackMu =
+    known.length > 0
+      ? known.reduce((sum, prior) => sum + prior.mu, 0) / known.length
+      : 1500;
+  const priors = cards.map(
+    (card) => card.played.prior ?? { mu: fallbackMu, sigma: VAGUE_PRIOR_SIGMA },
+  );
+  return buildHiddenBoard(priors, bounds);
+}
+
+/** Cards in the order they were placed. */
+function placementOrder(cards: PlayedCard[]) {
+  return cards
+    .map((card, position) => ({
+      card,
+      order: card.played.placementIndex ?? position,
+    }))
+    .sort((a, b) => a.order - b.order)
+    .map((entry) => entry.card);
+}
 
 function parsePrior(yearText: string, sigmaText: string): Prior | null {
   const mu = parseYear(yearText);
@@ -750,23 +782,30 @@ export default function Board(props: Props) {
     .join("|");
   const hidden = React.useMemo(() => {
     if (state.played.length === 0) return null;
-    const known = state.played
-      .map((card) => card.played.prior)
-      .filter((prior): prior is Prior => prior !== undefined);
-    const fallbackMu =
-      known.length > 0
-        ? known.reduce((sum, prior) => sum + prior.mu, 0) / known.length
-        : 1500;
-    const priors = state.played.map(
-      (card) =>
-        card.played.prior ?? { mu: fallbackMu, sigma: VAGUE_PRIOR_SIGMA },
-    );
-    const board = buildHiddenBoard(priors, bounds);
-    return { board };
+    return { board: boardForCards(state.played, bounds) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [priorsKey, bounds]);
 
   const revealed = state.lives <= 0 || isDeckExhausted;
+
+  // The board before the latest placement, to show how it moved every card.
+  const previous = React.useMemo(() => {
+    if (revealed || latestIndex === null || state.played.length < 2) {
+      return null;
+    }
+    const latest = state.played[latestIndex];
+    const rest = state.played.filter((card) => card.id !== latest.id);
+    return {
+      board: boardForCards(rest, bounds),
+      /** For each current card, its index on the previous board. */
+      indexMap: state.played.map((card) =>
+        card.id === latest.id ? null : rest.indexOf(card),
+      ),
+      /** The new card had only its prior before. */
+      latestPrior: latest.played.prior ?? null,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priorsKey, bounds, latestIndex, revealed]);
   // Tapped card: enlarged above the row and highlighted on the Bayes curves.
   const [focusedId, setFocusedId] = React.useState<null | string>(null);
   const handleCardTap = React.useCallback((id: string) => {
@@ -780,6 +819,26 @@ export default function Board(props: Props) {
     focusedIndex !== null && focusedIndex >= 0
       ? state.played[focusedIndex]
       : null;
+
+  // At the end: the tapped card's posterior after each placement from its
+  // own onwards (the last is the final posterior).
+  const focusedHistory = React.useMemo(() => {
+    if (!revealed || !focusedCard) return null;
+    const order = placementOrder(state.played);
+    const start = order.findIndex((card) => card.id === focusedCard.id);
+    if (start < 0) return null;
+    const steps: { board: HiddenBoard; index: number }[] = [];
+    for (let k = start; k < order.length; k += 1) {
+      const placed = new Set(order.slice(0, k + 1).map((card) => card.id));
+      const subset = state.played.filter((card) => placed.has(card.id));
+      steps.push({
+        board: boardForCards(subset, bounds),
+        index: subset.findIndex((card) => card.id === focusedCard.id),
+      });
+    }
+    return steps;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealed, focusedCard?.id, priorsKey, bounds]);
   // Close it when a drag starts or the timeline changes.
   React.useEffect(() => {
     if (isDragging) setFocusedId(null);
@@ -794,7 +853,8 @@ export default function Board(props: Props) {
       const target = event.target as Element | null;
       if (
         target?.closest("[data-card-id]") ||
-        target?.closest("[data-focused-card-overlay]")
+        target?.closest("[data-focused-card-overlay]") ||
+        target?.closest("[data-bayes-panel]")
       ) {
         return;
       }
@@ -962,6 +1022,8 @@ export default function Board(props: Props) {
             focusedIndex={
               focusedIndex !== null && focusedIndex >= 0 ? focusedIndex : null
             }
+            focusedHistory={focusedHistory}
+            focusedPrior={focusedCard?.played.prior ?? null}
             focusedTitle={focusedCard?.title ?? null}
             latestIndex={latestIndex}
             nudge={priorNudge}
@@ -974,6 +1036,7 @@ export default function Board(props: Props) {
             onReveal={handleReveal}
             onSigmaTextChange={setPriorSigmaText}
             onYearTextChange={setPriorYearText}
+            previous={previous}
             open={gapOddsOpen || awaitingFirstCard}
             revealed={revealed}
             sigmaText={priorSigmaText}

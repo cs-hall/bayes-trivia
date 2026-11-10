@@ -4,11 +4,14 @@ import { vars } from "./theme.css";
 
 export const mixColor = createVar();
 export const guessColor = createVar();
+/** Years a placement ruled out for a card. */
+export const lostColor = createVar();
 
 export const panel = style({
   vars: {
     [mixColor]: "#2a78d6",
     [guessColor]: "#eb6834",
+    [lostColor]: "#d9412f",
   },
   color: vars.color.text,
   display: "flex",
@@ -25,6 +28,7 @@ export const panel = style({
       vars: {
         [mixColor]: "#3987e5",
         [guessColor]: "#d95926",
+        [lostColor]: "#e8604f",
       },
     },
   },
@@ -143,6 +147,26 @@ export const swatch = style({
   width: "0.875rem",
 });
 
+/** Posteriors after each placement: orange (oldest) to dark (newest). */
+export const historySwatch = style([
+  lineSwatch,
+  {
+    background: `linear-gradient(90deg, ${guessColor}, ${vars.color.text})`,
+    height: "2px",
+    verticalAlign: "0.15rem",
+  },
+]);
+
+export const finalLineSwatch = style([
+  lineSwatch,
+  { borderTop: `2.5px solid ${vars.color.text}` },
+]);
+
+export const lostSwatch = style([
+  swatch,
+  { background: lostColor, opacity: 0.55 },
+]);
+
 export const mixSwatch = style([swatch, { background: mixColor }]);
 export const guessSwatch = style([swatch, { background: guessColor }]);
 export const selectSwatch = style([
@@ -159,6 +183,31 @@ export const chartBox = style({
   position: "relative",
   touchAction: "manipulation",
   width: "100%",
+});
+
+export const zoomControls = style({
+  display: "flex",
+  gap: vars.space.hairline,
+  marginLeft: "auto",
+});
+
+export const zoomButton = style({
+  alignItems: "center",
+  background: vars.color.surface,
+  border: `${vars.size.borderWidth} solid ${vars.color.border}`,
+  borderRadius: vars.radius.pill,
+  color: vars.color.text,
+  cursor: "pointer",
+  display: "inline-flex",
+  font: "inherit",
+  fontSize: vars.fontSize.xs,
+  height: "1.5rem",
+  justifyContent: "center",
+  lineHeight: 1,
+  minWidth: "1.5rem",
+  opacity: 0.85,
+  padding: `0 ${vars.space.xs}`,
+  ":disabled": { cursor: "default", opacity: 0.35 },
 });
 
 export const canvas = style({
