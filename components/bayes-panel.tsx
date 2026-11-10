@@ -573,7 +573,7 @@ export default function BayesPanel(props: Props) {
     firstSwatch = null;
     secondSwatch = null;
   } else if (awaitingFirstCard) {
-    firstSwatch = styles.guessSwatch;
+    firstSwatch = styles.priorSwatch;
     secondSwatch = null;
     firstLine = hasPrior ? (
       <>
@@ -641,7 +641,7 @@ export default function BayesPanel(props: Props) {
         </>
       );
   } else {
-    firstSwatch = styles.guessSwatch;
+    firstSwatch = styles.priorSwatch;
     secondSwatch = null;
     firstLine = (
       <span className={styles.muted}>
@@ -802,7 +802,8 @@ export default function BayesPanel(props: Props) {
       ) : (
         <div className={styles.headerRow}>
           <span className={styles.strong}>
-            Posterior median ○ → true year ●
+            Posterior median ○ → true year{" "}
+            <span style={{ color: styles.truthColor }}>●</span>
           </span>
           <span className={styles.headerActions}>
             <button
@@ -1060,7 +1061,7 @@ export default function BayesPanel(props: Props) {
                         shift.peak,
                       )}
                       fill="none"
-                      stroke={shift.isNew ? styles.guessColor : "currentColor"}
+                      stroke={shift.isNew ? styles.priorColor : "currentColor"}
                       strokeDasharray="3 3"
                       strokeOpacity={shift.isNew ? 0.8 : 0.35}
                     />
@@ -1181,7 +1182,7 @@ export default function BayesPanel(props: Props) {
                       ? `${focusedTitle.slice(0, 27)}…`
                       : focusedTitle;
                   const history = historyCurves;
-                  // At the end: prior (orange) → each update → final (dark),
+                  // At the end: prior (blue) → each update → final (dark),
                   // all on one density scale. Otherwise just the posterior.
                   const steps = history?.steps ?? [curve];
                   const peak = history?.peak;
@@ -1213,12 +1214,12 @@ export default function BayesPanel(props: Props) {
                             peak,
                           )}
                           fill="none"
-                          stroke={styles.guessColor}
+                          stroke={styles.priorColor}
                           strokeWidth={2.5}
                         />
                       ) : null}
                       {steps.slice(0, -1).map((ys, k) => {
-                        const orange = Math.round(
+                        const priorShare = Math.round(
                           100 * (1 - (k + 1) / steps.length),
                         );
                         return (
@@ -1237,7 +1238,7 @@ export default function BayesPanel(props: Props) {
                             strokeOpacity={0.9}
                             strokeWidth={1.25}
                             style={{
-                              stroke: `color-mix(in srgb, ${styles.guessColor} ${orange}%, currentColor)`,
+                              stroke: `color-mix(in srgb, ${styles.priorColor} ${priorShare}%, currentColor)`,
                             }}
                           />
                         );
@@ -1287,7 +1288,7 @@ export default function BayesPanel(props: Props) {
               <path
                 d={priorCurve}
                 fill="none"
-                stroke={styles.guessColor}
+                stroke={styles.priorColor}
                 strokeWidth={2}
               />
             ) : null}
@@ -1319,7 +1320,7 @@ export default function BayesPanel(props: Props) {
                         <circle
                           cx={toX(year)}
                           cy={y}
-                          fill={styles.guessColor}
+                          fill={styles.truthColor}
                           r={3}
                         />
                       </g>
@@ -1331,7 +1332,7 @@ export default function BayesPanel(props: Props) {
               <g>
                 {/* ±1 SD bar with draggable ends */}
                 <line
-                  stroke={styles.guessColor}
+                  stroke={styles.priorColor}
                   strokeLinecap="round"
                   strokeWidth={3}
                   x1={priorControls.left}
@@ -1343,7 +1344,7 @@ export default function BayesPanel(props: Props) {
                   <circle
                     cx={x}
                     cy={barY}
-                    fill={styles.guessColor}
+                    fill={styles.priorColor}
                     key={`h${k}`}
                     r={HANDLE_RADIUS}
                     stroke={vars.color.backdropStrong}
@@ -1351,7 +1352,7 @@ export default function BayesPanel(props: Props) {
                   />
                 ))}
                 <text
-                  fill={styles.guessColor}
+                  fill={styles.priorColor}
                   fontSize={10}
                   fontWeight={600}
                   textAnchor="middle"
@@ -1363,7 +1364,7 @@ export default function BayesPanel(props: Props) {
                 {priorControls.meanVisible ? (
                   <>
                     <line
-                      stroke={styles.guessColor}
+                      stroke={styles.priorColor}
                       strokeDasharray="2 3"
                       strokeOpacity={0.8}
                       x1={priorControls.mean}
@@ -1374,11 +1375,11 @@ export default function BayesPanel(props: Props) {
                     <circle
                       cx={priorControls.mean}
                       cy={CHART_HEIGHT - curveHeight}
-                      fill={styles.guessColor}
+                      fill={styles.priorColor}
                       r={4}
                     />
                     <text
-                      fill={styles.guessColor}
+                      fill={styles.priorColor}
                       fontSize={10}
                       fontWeight={600}
                       textAnchor={

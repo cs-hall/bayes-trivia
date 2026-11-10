@@ -1,15 +1,11 @@
 import { createVar, style } from "@vanilla-extract/css";
-import { media } from "./foundation";
 import { vars } from "./theme.css";
 
-/** Same orange as the prior and the true-year dots on the Bayes chart. */
+/** The truth: the same sage as the correct-card labels. */
 const trueColor = createVar();
 
 export const overlay = style({
-  vars: { [trueColor]: "#eb6834" },
-  "@media": {
-    [media.dark]: { vars: { [trueColor]: "#d95926" } },
-  },
+  vars: { [trueColor]: vars.color.success },
   color: vars.color.text,
   left: 0,
   overflow: "visible",
