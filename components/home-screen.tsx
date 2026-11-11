@@ -15,6 +15,7 @@ export default function HomeScreen() {
             <div className={styles.actions}>
               <ButtonLink fullWidth href="/daily" text="Daily" />
               <ButtonLink fullWidth href="/play" minimal text="Free play" />
+              <ButtonLink fullWidth href="/tutorial" minimal text="Tutorial" />
             </div>
             <a
               className={styles.originalLink}

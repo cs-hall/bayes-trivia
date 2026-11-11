@@ -279,3 +279,17 @@ test("posteriorLogScore is exact far from the posterior", () => {
   assert.ok(score < -3000, `${score}`);
   assert.ok(Math.abs(score - prior) < 1, `${score} vs ${prior}`);
 });
+
+test("slot odds count the prior's mass beyond the grid", () => {
+  // One card, surely 1500. The grid only spans ~1494–1506, but a new card
+  // at 1700 ± 100 is still mostly after it, and one at 1300 mostly before.
+  const bounds = { min: 0, max: 2026 };
+  const board = buildHiddenBoard([{ mu: 1500, sigma: 1 }], bounds);
+  const after = hiddenGapProbabilities(board, { mu: 1700, sigma: 100 });
+  close(after[1], 1 - 0.02275 / (1 - 1e-9), 2e-3);
+  const before = hiddenGapProbabilities(board, { mu: 1300, sigma: 100 });
+  assert.ok(before[0] > 0.97 && before[0] < 0.98, `${before[0]}`);
+  // Half above, but years after 2026 are impossible: (Φ(1.265) − ½) / Φ(1.265)
+  const split = hiddenGapProbabilities(board, { mu: 1500, sigma: 416 });
+  close(split[1], (0.8971 - 0.5) / (0.8971 - 0.00016), 5e-3);
+});

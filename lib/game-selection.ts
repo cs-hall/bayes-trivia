@@ -574,6 +574,11 @@ export function checkCorrect(
 }
 
 export function drawNextCard(state: GameState): PreparedCard | null {
+  if (state.scriptedQueue) {
+    const [scripted, ...rest] = state.scriptedQueue;
+    state.scriptedQueue = rest;
+    return scripted ?? null;
+  }
   const card = chooseCard(state, [1, 0.75, 0.5, 0]);
   if (!card) {
     return null;

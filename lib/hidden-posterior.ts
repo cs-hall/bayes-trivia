@@ -423,21 +423,31 @@ export function hiddenGapProbabilities(board: HiddenBoard, prior: Prior) {
   const { grid, step, gapGivenX } = board;
   const size = grid.length;
   const logMass = logBinMass(grid, step, prior, board.bounds);
-  // Mass below the grid only counts when there is no lower bound.
-  const logLeftTail = Number.isFinite(board.bounds.min)
-    ? -Infinity
-    : logNormMassBetween(prior, -Infinity, grid[0] - step / 2);
+  // The grid only spans the placed cards' priors. The rest of the allowed
+  // years lie below every card (first slot) or above every card (last slot).
+  const gridLo = grid[0] - step / 2;
+  const gridHi = grid[size - 1] + step / 2;
+  const lo = Number.isFinite(board.bounds.min)
+    ? board.bounds.min - 0.5
+    : -Infinity;
+  const hi = board.bounds.max + 0.5;
+  const logLeftTail =
+    lo < gridLo ? logNormMassBetween(prior, lo, gridLo) : -Infinity;
+  const logRightTail =
+    hi > gridHi ? logNormMassBetween(prior, gridHi, hi) : -Infinity;
   // Rescale by the largest term so nothing underflows; the prior is
   // truncated to the bounds, so renormalise at the end.
-  let max = logLeftTail;
+  let max = Math.max(logLeftTail, logRightTail);
   for (let j = 0; j < size; j += 1) max = Math.max(max, logMass[j]);
   if (max === -Infinity) return gapGivenX.map(() => 0);
   const leftTail = Math.exp(logLeftTail - max);
+  const rightTail = Math.exp(logRightTail - max);
   const mass = logMass.map((v) => Math.exp(v - max));
-  let total = leftTail;
+  let total = leftTail + rightTail;
   for (let j = 0; j < size; j += 1) total += mass[j];
-  const probs = gapGivenX.map((w) => {
-    let p = leftTail * w[0];
+  const last = gapGivenX.length - 1;
+  const probs = gapGivenX.map((w, g) => {
+    let p = (g === 0 ? leftTail : 0) + (g === last ? rightTail : 0);
     for (let j = 0; j < size; j += 1) p += mass[j] * w[j];
     return p;
   });

@@ -740,7 +740,7 @@ export default function BayesPanel(props: Props) {
       data-bayes-panel=""
     >
       {!revealed ? (
-        <div className={styles.headerRow}>
+        <div className={styles.headerRow} data-tutorial-part="prior">
           <label className={styles.strong} htmlFor="bayes-prior-year">
             Prior
           </label>
@@ -815,7 +815,7 @@ export default function BayesPanel(props: Props) {
           Set a prior (year and ±) before placing the card.
         </div>
       ) : null}
-      <div className={styles.readout}>
+      <div className={styles.readout} data-tutorial-part="readout">
         {firstLine ? (
           <div>
             {firstSwatch ? <span className={firstSwatch} /> : null}
@@ -910,6 +910,7 @@ export default function BayesPanel(props: Props) {
       ) : null}
       <div
         className={styles.chartBox}
+        data-tutorial-part="chart"
         ref={boxRef}
         style={{ height: BOX_HEIGHT }}
       >

@@ -25,6 +25,7 @@ import {
   PlacementRequest,
 } from "../lib/placement-animation";
 import { TrimmedCurve, trimBoard, trimCurve } from "../lib/posterior-history";
+import { EIFFEL_ID, TRAP_PRIOR, TutorialScene } from "../lib/tutorial";
 import {
   intersectYearRange,
   useFreePlayYearRange,
@@ -42,6 +43,7 @@ import NextItemList from "./next-item-list";
 import PlacementAnimationLayer from "./placement-animation-layer";
 import PlayedItemList from "./played-item-list";
 import TimelineLeaderLines from "./timeline-leader-lines";
+import TutorialCoach, { STEP_FOCUS, TutorialStep } from "./tutorial-coach";
 import * as styles from "../styles/board.css";
 
 const DEAL_REVEAL_DELAY_MS = 120;
@@ -125,6 +127,12 @@ interface Props {
   selectionRoute?: SelectionRoute;
   state: GameState;
   setState: (state: GameState) => void;
+  /** Set when this board is a tutorial scene: shows the coach. */
+  tutorial?: {
+    onNextScene: () => void;
+    onRestart: () => void;
+    scene: TutorialScene;
+  };
   updateHighscore: (score: number) => void;
 }
 
@@ -145,10 +153,12 @@ export default function Board(props: Props) {
     routePath,
     selectionRoute,
     state,
+    tutorial,
     setState,
     updateHighscore,
   } = props;
   const restoredCompletedGame = restoredFromSnapshot && state.lives <= 0;
+  const inTutorial = tutorial !== undefined;
 
   const [isDragging, setIsDragging] = React.useState(false);
   const [deckState, setDeckState] = React.useState<
@@ -752,9 +762,16 @@ export default function Board(props: Props) {
 
   // New card on deck: its prior starts empty (keep the ± as a default).
   const nextCardId = state.next?.id ?? null;
+  const tutorialScene = tutorial?.scene ?? null;
   React.useEffect(() => {
+    // Tutorial scene 2 starts with its example prior filled in.
+    if (tutorialScene === 2 && nextCardId !== null) {
+      setPriorYearText(String(TRAP_PRIOR.mu));
+      setPriorSigmaText(String(TRAP_PRIOR.sigma));
+      return;
+    }
     setPriorYearText("");
-  }, [nextCardId]);
+  }, [nextCardId, tutorialScene]);
 
   const latestIndex = React.useMemo(() => {
     let latest: null | { index: number; position: number } = null;
@@ -770,7 +787,7 @@ export default function Board(props: Props) {
   // Every card is known to lie in the free-play year range (and before now).
   const yearRange = useFreePlayYearRange().range;
   const effectiveRange =
-    gameMode === "free-play"
+    gameMode === "free-play" && !tutorial
       ? intersectYearRange(yearRange, selectionRoute)
       : { max: null, min: null };
   const bounds = React.useMemo(
@@ -999,11 +1016,38 @@ export default function Board(props: Props) {
   React.useEffect(() => {
     if (!revealed) return;
     setCalibrationHistory(
-      calibrationRecords.length > 0
+      // The tutorial's scripted games don't count towards the history.
+      calibrationRecords.length > 0 && !inTutorial
         ? recordGame(gameKey, calibrationRecords)
         : loadHistory(),
     );
-  }, [calibrationRecords, gameKey, revealed]);
+  }, [calibrationRecords, gameKey, inTutorial, revealed]);
+
+  // Tutorial: which step the coach is on, from what the player has done.
+  let tutorialStep: TutorialStep | null = null;
+  if (tutorial) {
+    const placed = state.played.length - (pendingResolvedState ? 1 : 0);
+    if (tutorial.scene === 2) tutorialStep = revealed ? "end" : "trap";
+    else if (placed <= 0) tutorialStep = currentPrior ? "curve" : "prior";
+    else if (placed === 1) tutorialStep = currentPrior ? "slots" : "posterior";
+    else tutorialStep = "update";
+  }
+  const eiffelIndex = tutorial
+    ? state.played.findIndex((card) => card.id === EIFFEL_ID)
+    : -1;
+  const eiffelBefore =
+    eiffelIndex >= 0 && state.played[eiffelIndex].played.prior
+      ? state.played[eiffelIndex].played.prior
+      : null;
+  const eiffelAfter =
+    eiffelIndex >= 0 ? hidden?.board.posteriors[eiffelIndex] : undefined;
+  const tutorialEiffel =
+    eiffelBefore && eiffelAfter && state.played.length >= 2
+      ? {
+          after: { median: eiffelAfter.median, sd: eiffelAfter.sd },
+          before: { median: eiffelBefore.mu, sd: eiffelBefore.sigma },
+        }
+      : null;
 
   const handleReveal = React.useCallback(() => {
     if (isPlacementSettling || state.lives <= 0) return;
@@ -1045,7 +1089,28 @@ export default function Board(props: Props) {
           [styles.wrapperWithOdds]: gapOddsExpanded,
           [styles.wrapperRevealed]: revealed && showGameOverSummary,
         })}
+        data-tutorial-focus={
+          tutorialStep && !isDragging ? STEP_FOCUS[tutorialStep] : undefined
+        }
       >
+        {tutorial && tutorialStep ? (
+          <TutorialCoach
+            dragging={isDragging}
+            eiffel={tutorialEiffel}
+            lastCorrect={
+              latestIndex !== null
+                ? state.played[latestIndex].played.correct
+                : true
+            }
+            onFill={(prior) => {
+              setPriorYearText(String(prior.mu));
+              setPriorSigmaText(String(prior.sigma));
+            }}
+            onNextScene={tutorial.onNextScene}
+            onRestart={tutorial.onRestart}
+            step={tutorialStep}
+          />
+        ) : null}
         {showPanel && gapOddsExpanded && hidden ? (
           <TimelineLeaderLines
             focusedIndex={
