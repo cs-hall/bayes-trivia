@@ -11,6 +11,11 @@
  *   W_g(x) = P(Y_{g-1} < x < Y_g, rest ordered) / P(rest ordered)
  * which, for each x, sums to 1 over g: it is P(gap g | X = x). The odds for
  * a prior N(mu, sigma) are then Σ_x N(x; mu, sigma) · W_g(x).
+ *
+ * Everything runs in log space. When the order contradicts confident priors
+ * the relevant probabilities can be far below 1e-308 (e.g. 1e-10000), which
+ * would round to zero and leave a card with no posterior at all; their logs
+ * are ordinary numbers, so the answer stays exact however extreme.
  */
 
 import { normCdf } from "./gap-odds";
@@ -73,6 +78,8 @@ export interface HiddenBoard {
   grid: Float64Array;
   /** Normalised marginal posterior mass per card on the grid. */
   marginals: Float64Array[];
+  /** The same, as natural logs (exact even where the mass underflows). */
+  logMarginals: Float64Array[];
   posteriors: CardPosterior[];
   priors: Prior[];
   step: number;
@@ -99,53 +106,101 @@ export interface HiddenGapSummary {
   xs: number[];
 }
 
-function binMass(
+const LOG_SQRT_2PI = 0.5 * Math.log(2 * Math.PI);
+
+/** log Φ(z), accurate far into the lower tail. */
+function logNormCdf(z: number): number {
+  if (z === -Infinity) return -Infinity;
+  if (z > -30) return Math.log(normCdf(z));
+  // Asymptotic series for the Mills ratio.
+  const z2 = z * z;
+  return (
+    -0.5 * z2 -
+    Math.log(-z) -
+    LOG_SQRT_2PI +
+    Math.log1p(-1 / z2 + 3 / (z2 * z2) - 15 / (z2 * z2 * z2))
+  );
+}
+
+/** log(e^b − e^a) for a ≤ b. */
+function logDiffExp(b: number, a: number): number {
+  if (a === -Infinity) return b;
+  if (!(b > a)) return -Infinity;
+  return b + Math.log(-Math.expm1(a - b));
+}
+
+/** log P(a < Y ≤ b) for Y ~ N(mu, s), computed from the nearer tail so it
+ * never rounds to zero. */
+function logNormMassBetween(prior: Prior, a: number, b: number): number {
+  const s = Math.max(prior.sigma, PRIOR_SIGMA_MIN);
+  const za = (a - prior.mu) / s;
+  const zb = (b - prior.mu) / s;
+  if (za >= 0) return logDiffExp(logNormCdf(-za), logNormCdf(-zb));
+  if (zb <= 0) return logDiffExp(logNormCdf(zb), logNormCdf(za));
+  return Math.log(normCdf(zb) - normCdf(za));
+}
+
+function logAddExp(a: number, b: number): number {
+  if (a === -Infinity) return b;
+  if (b === -Infinity) return a;
+  return a > b
+    ? a + Math.log1p(Math.exp(b - a))
+    : b + Math.log1p(Math.exp(a - b));
+}
+
+/** log Σ exp(arr). */
+function logSumExp(arr: Float64Array): number {
+  let max = -Infinity;
+  for (let j = 0; j < arr.length; j += 1) if (arr[j] > max) max = arr[j];
+  if (max === -Infinity) return -Infinity;
+  let sum = 0;
+  for (let j = 0; j < arr.length; j += 1) sum += Math.exp(arr[j] - max);
+  return max + Math.log(sum);
+}
+
+/** Subtract log Σ exp(arr) so it sums to 1; returns that log sum. */
+function logNormaliseInPlace(arr: Float64Array): number {
+  const total = logSumExp(arr);
+  if (total === -Infinity) return total;
+  for (let j = 0; j < arr.length; j += 1) arr[j] -= total;
+  return total;
+}
+
+/** A prior's log mass per grid bin; years outside the bounds are −∞. */
+function logBinMass(
   grid: Float64Array,
   step: number,
   prior: Prior,
-  out: Float64Array,
   bounds: YearBounds = DEFAULT_BOUNDS,
 ) {
   const half = step / 2;
-  const s = Math.max(prior.sigma, PRIOR_SIGMA_MIN);
-  let prev = normCdf((grid[0] - half - prior.mu) / s);
-  let total = 0;
-  let first = -1;
-  let last = -1;
+  const out = new Float64Array(grid.length);
   for (let j = 0; j < grid.length; j += 1) {
-    const next = normCdf((grid[j] + half - prior.mu) / s);
-    // Years outside the bounds are impossible.
     const inside =
       grid[j] + half > bounds.min - 0.5 && grid[j] - half < bounds.max + 0.5;
-    out[j] = inside ? Math.max(0, next - prev) : 0;
-    if (inside) {
-      if (first < 0) first = j;
-      last = j;
-    }
-    total += out[j];
-    prev = next;
+    out[j] = inside
+      ? logNormMassBetween(prior, grid[j] - half, grid[j] + half)
+      : -Infinity;
   }
-  // A prior far outside the bounds has (numerically) no mass inside them:
-  // its truncated limit is the nearest allowed year.
-  if (!(total > 1e-300) && first >= 0) {
-    out[prior.mu < grid[first] ? first : last] = 1;
-  }
+  return out;
 }
 
-function normaliseInPlace(arr: Float64Array): number {
-  let sum = 0;
-  for (let j = 0; j < arr.length; j += 1) sum += arr[j];
-  if (sum > 0) {
-    for (let j = 0; j < arr.length; j += 1) arr[j] /= sum;
-  }
-  return sum;
+/** exp of a normalised log array. */
+function expArray(arr: Float64Array) {
+  const out = new Float64Array(arr.length);
+  for (let j = 0; j < arr.length; j += 1) out[j] = Math.exp(arr[j]);
+  return out;
 }
 
 function quantile(mass: Float64Array, grid: Float64Array, q: number): number {
+  let total = 0;
+  for (let j = 0; j < mass.length; j += 1) total += mass[j];
+  // No mass at all: say so rather than report the grid's last year.
+  if (!(total > 0)) return NaN;
   let acc = 0;
   for (let j = 0; j < mass.length; j += 1) {
     acc += mass[j];
-    if (acc >= q) return grid[j];
+    if (acc >= q * total) return grid[j];
   }
   return grid[grid.length - 1];
 }
@@ -153,6 +208,8 @@ function quantile(mass: Float64Array, grid: Float64Array, q: number): number {
 export function buildHiddenBoard(
   priors: Prior[],
   bounds: YearBounds = DEFAULT_BOUNDS,
+  /** Extra years the grid must cover (e.g. true years, once revealed). */
+  cover: number[] = [],
 ): HiddenBoard {
   const n = priors.length;
   let lo = Infinity;
@@ -160,6 +217,10 @@ export function buildHiddenBoard(
   for (const p of priors) {
     lo = Math.min(lo, p.mu - 6 * p.sigma);
     hi = Math.max(hi, p.mu + 6 * p.sigma);
+  }
+  for (const year of cover) {
+    lo = Math.min(lo, year - 1);
+    hi = Math.max(hi, year + 1);
   }
   if (n === 0) {
     lo = 0;
@@ -178,102 +239,118 @@ export function buildHiddenBoard(
   const grid = new Float64Array(size);
   for (let j = 0; j < size; j += 1) grid[j] = start + j * step;
 
-  const pMass = priors.map((p) => {
-    const arr = new Float64Array(size);
-    binMass(grid, step, p, arr, bounds);
-    return arr;
-  });
+  const logP = priors.map((p) => logBinMass(grid, step, p, bounds));
 
-  // Forward: F_i ∝ p_i(y) Σ_{y' < y} F_{i-1}(y')
+  // Forward: F_i ∝ p_i(y) Σ_{y' < y} F_{i-1}(y'). fBelow[i][j] keeps
+  // log Σ_{j' < j} F_{i-1}(j'), reused for the gap weights.
   const F: Float64Array[] = [];
+  const fBelow: Float64Array[] = [];
   const logF: number[] = [];
   for (let i = 0; i < n; i += 1) {
     const f = new Float64Array(size);
+    const below = new Float64Array(size);
     if (i === 0) {
-      f.set(pMass[0]);
+      f.set(logP[0]);
+      below.fill(0);
     } else {
-      let cum = 0;
+      let cum = -Infinity;
       const prev = F[i - 1];
       for (let j = 0; j < size; j += 1) {
-        f[j] = pMass[i][j] * cum;
-        cum += prev[j];
+        below[j] = cum;
+        f[j] = logP[i][j] + cum;
+        cum = logAddExp(cum, prev[j]);
       }
     }
-    const sum = normaliseInPlace(f);
-    logF.push((i === 0 ? 0 : logF[i - 1]) + Math.log(sum || 1e-300));
+    const total = logNormaliseInPlace(f);
+    logF.push((i === 0 ? 0 : logF[i - 1]) + total);
     F.push(f);
+    fBelow.push(below);
   }
 
-  // Backward: R_i ∝ p_i(y) Σ_{y' > y} R_{i+1}(y')
+  // Backward: R_i ∝ p_i(y) Σ_{y' > y} R_{i+1}(y'). rAbove[i][j] keeps
+  // log Σ_{j' > j} R_{i+1}(j') (0 for the last card: nothing above).
   const R: Float64Array[] = new Array(n);
+  const rAbove: Float64Array[] = new Array(n);
   const logR: number[] = new Array(n);
   for (let i = n - 1; i >= 0; i -= 1) {
     const r = new Float64Array(size);
+    const above = new Float64Array(size);
     if (i === n - 1) {
-      r.set(pMass[i]);
+      r.set(logP[i]);
+      above.fill(0);
     } else {
-      let cum = 0;
+      let cum = -Infinity;
       const next = R[i + 1];
       for (let j = size - 1; j >= 0; j -= 1) {
-        r[j] = pMass[i][j] * cum;
-        cum += next[j];
+        above[j] = cum;
+        r[j] = logP[i][j] + cum;
+        cum = logAddExp(cum, next[j]);
       }
     }
-    const sum = normaliseInPlace(r);
-    logR[i] = (i === n - 1 ? 0 : logR[i + 1]) + Math.log(sum || 1e-300);
+    const total = logNormaliseInPlace(r);
+    logR[i] = (i === n - 1 ? 0 : logR[i + 1]) + total;
     R[i] = r;
+    rAbove[i] = above;
   }
   const logZ = n > 0 ? logF[n - 1] : 0;
 
   // Marginals: F_i(y) · Σ_{y' > y} R_{i+1}(y')
+  const logMarginals: Float64Array[] = [];
   const marginals: Float64Array[] = [];
   for (let i = 0; i < n; i += 1) {
     const m = new Float64Array(size);
-    if (i === n - 1) {
-      m.set(F[i]);
-    } else {
-      let cum = 0;
-      const next = R[i + 1];
-      for (let j = size - 1; j >= 0; j -= 1) {
-        m[j] = F[i][j] * cum;
-        cum += next[j];
-      }
-    }
-    normaliseInPlace(m);
-    marginals.push(m);
+    for (let j = 0; j < size; j += 1) m[j] = F[i][j] + rAbove[i][j];
+    logNormaliseInPlace(m);
+    logMarginals.push(m);
+    marginals.push(expArray(m));
   }
 
-  // P(gap g | X = x): left running sum of F_{g-1} below x times right
-  // running sum of R_g above x, with the chain scales restored.
-  const gapGivenX: Float64Array[] = [];
+  // P(gap g | X = x): (Σ F_{g-1} below x) · (Σ R_g above x) with the chain
+  // scales restored, normalised over g at each x.
+  const logW: Float64Array[] = [];
   for (let g = 0; g <= n; g += 1) {
     const w = new Float64Array(size);
-    const scale = Math.exp(
-      (g >= 1 ? logF[g - 1] : 0) + (g <= n - 1 ? logR[g] : 0) - logZ,
-    );
-    // right[j] = Σ_{j' > j} R_g(j')
-    const right = new Float64Array(size);
-    if (g <= n - 1) {
-      let cum = 0;
+    const scale =
+      (g >= 1 ? logF[g - 1] : 0) + (g <= n - 1 ? logR[g] : 0) - logZ;
+    // Left: Σ_{j' < j} F_{g-1}(j') is fBelow[g] (or, past the last card,
+    // a running sum over F_{n-1}). Right: Σ_{j' > j} R_g(j') is rAbove[g-1]
+    // (or, before the first card, a running sum over R_0).
+    let leftCum = -Infinity;
+    let rightAll: Float64Array | null = null;
+    if (g === 0 && n > 0) {
+      rightAll = new Float64Array(size);
+      let cum = -Infinity;
       for (let j = size - 1; j >= 0; j -= 1) {
-        right[j] = cum;
-        cum += R[g][j];
+        rightAll[j] = cum;
+        cum = logAddExp(cum, R[0][j]);
       }
-    } else {
-      right.fill(1);
     }
-    let left = g >= 1 ? 0 : 1;
     for (let j = 0; j < size; j += 1) {
-      w[j] = left * right[j] * scale;
-      if (g >= 1) left += F[g - 1][j];
+      let left: number;
+      if (g === 0) left = 0;
+      else if (g < n) left = fBelow[g][j];
+      else {
+        left = leftCum;
+        leftCum = logAddExp(leftCum, F[n - 1][j]);
+      }
+      const right =
+        g === n
+          ? 0
+          : g === 0
+            ? (rightAll as Float64Array)[j]
+            : rAbove[g - 1][j];
+      w[j] = left + right + scale;
     }
-    gapGivenX.push(w);
+    logW.push(w);
   }
-  // Re-normalise across gaps (guards against rounding / bin ties).
+  const gapGivenX: Float64Array[] = logW.map(() => new Float64Array(size));
   for (let j = 0; j < size; j += 1) {
-    let sum = 0;
-    for (let g = 0; g <= n; g += 1) sum += gapGivenX[g][j];
-    if (sum > 0) for (let g = 0; g <= n; g += 1) gapGivenX[g][j] /= sum;
+    let total = -Infinity;
+    for (let g = 0; g <= n; g += 1) total = logAddExp(total, logW[g][j]);
+    if (total === -Infinity) continue;
+    for (let g = 0; g <= n; g += 1) {
+      gapGivenX[g][j] = Math.exp(logW[g][j] - total);
+    }
   }
 
   const posteriors: CardPosterior[] = marginals.map((m) => {
@@ -325,6 +402,7 @@ export function buildHiddenBoard(
     ],
     gapGivenX,
     grid,
+    logMarginals,
     marginals,
     posteriors,
     priors,
@@ -335,22 +413,27 @@ export function buildHiddenBoard(
 /** Gap odds for a prior N(mu, sigma) on the current hidden board. */
 /** A prior as normalised mass on a board's grid, truncated to its bounds. */
 export function priorMassOnGrid(board: HiddenBoard, prior: Prior) {
-  const out = new Float64Array(board.grid.length);
-  binMass(board.grid, board.step, prior, out, board.bounds);
-  normaliseInPlace(out);
-  return out;
+  // A prior far outside the bounds piles up at the nearest allowed year.
+  const log = logBinMass(board.grid, board.step, prior, board.bounds);
+  logNormaliseInPlace(log);
+  return expArray(log);
 }
 
 export function hiddenGapProbabilities(board: HiddenBoard, prior: Prior) {
   const { grid, step, gapGivenX } = board;
   const size = grid.length;
-  const s = Math.max(prior.sigma, PRIOR_SIGMA_MIN);
-  const mass = new Float64Array(size);
-  binMass(grid, step, prior, mass, board.bounds);
+  const logMass = logBinMass(grid, step, prior, board.bounds);
   // Mass below the grid only counts when there is no lower bound.
-  const leftTail = Number.isFinite(board.bounds.min)
-    ? 0
-    : normCdf((grid[0] - step / 2 - prior.mu) / s);
+  const logLeftTail = Number.isFinite(board.bounds.min)
+    ? -Infinity
+    : logNormMassBetween(prior, -Infinity, grid[0] - step / 2);
+  // Rescale by the largest term so nothing underflows; the prior is
+  // truncated to the bounds, so renormalise at the end.
+  let max = logLeftTail;
+  for (let j = 0; j < size; j += 1) max = Math.max(max, logMass[j]);
+  if (max === -Infinity) return gapGivenX.map(() => 0);
+  const leftTail = Math.exp(logLeftTail - max);
+  const mass = logMass.map((v) => Math.exp(v - max));
   let total = leftTail;
   for (let j = 0; j < size; j += 1) total += mass[j];
   const probs = gapGivenX.map((w) => {
@@ -358,7 +441,6 @@ export function hiddenGapProbabilities(board: HiddenBoard, prior: Prior) {
     for (let j = 0; j < size; j += 1) p += mass[j] * w[j];
     return p;
   });
-  // Renormalise: the prior is truncated to the bounds.
   return total > 0 ? probs.map((p) => p / total) : probs;
 }
 
@@ -496,16 +578,17 @@ export function summariseHiddenGap(
  * (closer to 0) is better; a confident miss scores very low.
  */
 /** Log posterior probability of the true year (per year), for a board card.
- * Floored so a posterior that ruled the true year out stays finite. */
+ * Exact (from the log marginals); the board's grid must cover the year, so
+ * build it with the true years in `cover`. Off the grid: −∞. */
 export function posteriorLogScore(
   board: HiddenBoard,
   index: number,
   year: number,
 ): number {
-  const mass = board.marginals[index];
+  const log = board.logMarginals[index];
   const bin = Math.round((year - board.grid[0]) / board.step);
-  const p = mass && bin >= 0 && bin < mass.length ? mass[bin] : 0;
-  return Math.log(Math.max(p / board.step, 1e-300));
+  if (!log || bin < 0 || bin >= log.length) return -Infinity;
+  return log[bin] - Math.log(board.step);
 }
 
 export function priorLogScore(
@@ -513,14 +596,7 @@ export function priorLogScore(
   year: number,
   bounds: YearBounds = DEFAULT_BOUNDS,
 ): number {
-  const s = Math.max(prior.sigma, PRIOR_SIGMA_MIN);
-  const cdf = (x: number) => normCdf((x - prior.mu) / s);
-  const lo = Number.isFinite(bounds.min) ? cdf(bounds.min - 0.5) : 0;
-  const hi = cdf(bounds.max + 0.5);
-  const inside = hi - lo;
-  const mass = cdf(year + 0.5) - cdf(year - 0.5);
-  if (inside > 0 && mass > 0) return Math.log(mass / inside);
-  // Underflow far in the tail: the log of the normal density is exact enough.
-  const z = (year - prior.mu) / s;
-  return -0.5 * z * z - Math.log(s * Math.sqrt(2 * Math.PI));
+  const lo = Number.isFinite(bounds.min) ? bounds.min - 0.5 : -Infinity;
+  const inside = logNormMassBetween(prior, lo, bounds.max + 0.5);
+  return logNormMassBetween(prior, year - 0.5, year + 0.5) - inside;
 }

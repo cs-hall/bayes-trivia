@@ -9,6 +9,7 @@ import {
   PRIOR_SIGMA_MAX,
   priorMassOnGrid,
 } from "../lib/hidden-posterior";
+import { sampleCurve, TrimmedCurve } from "../lib/posterior-history";
 import * as styles from "../styles/gap-odds-panel.css";
 import { vars } from "../styles/theme.css";
 
@@ -34,11 +35,6 @@ export interface PreviousBoard {
   latestPrior: null | Prior;
 }
 
-export interface HistoryStep {
-  board: HiddenBoard;
-  index: number;
-}
-
 interface Props {
   awaitingFirstCard: boolean;
   board: HiddenBoard | null;
@@ -47,7 +43,7 @@ interface Props {
   canReveal: boolean;
   dragGap: number | null;
   /** At the end: the tapped card's posterior after each placement. */
-  focusedHistory: HistoryStep[] | null;
+  focusedHistory: TrimmedCurve[] | null;
   /** Placed card the player tapped: its posterior is highlighted. */
   focusedIndex: number | null;
   focusedPrior: null | Prior;
@@ -363,15 +359,13 @@ export default function BayesPanel(props: Props) {
     if (!revealed || !focusedHistory || focusedHistory.length === 0) {
       return null;
     }
-    const steps = focusedHistory.map((step) =>
-      densityAt(step.board, step.board.marginals[step.index], xs),
-    );
-    const last = focusedHistory[focusedHistory.length - 1].board;
-    const prior = focusedPrior
-      ? densityAt(last, priorMassOnGrid(last, focusedPrior), xs)
-      : null;
+    const steps = focusedHistory.map((curve) => sampleCurve(curve, xs));
+    const prior =
+      focusedPrior && board
+        ? densityAt(board, priorMassOnGrid(board, focusedPrior), xs)
+        : null;
     return { peak: maxOf(prior, ...steps), prior, steps };
-  }, [revealed, focusedHistory, focusedPrior, xs]);
+  }, [revealed, focusedHistory, focusedPrior, board, xs]);
 
   if (!open) {
     return (
