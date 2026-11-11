@@ -24,6 +24,7 @@ import {
   PlacementAnimationState,
   PlacementRequest,
 } from "../lib/placement-animation";
+import { TrimmedCurve, trimBoard, trimCurve } from "../lib/posterior-history";
 import {
   intersectYearRange,
   useFreePlayYearRange,
@@ -784,6 +785,12 @@ export default function Board(props: Props) {
     )
     .join("|");
   const revealed = state.lives <= 0 || isDeckExhausted;
+  // Each card's posterior after every placement, saved as the game goes.
+  const savedHistory = React.useRef<{
+    count: number;
+    curves: Map<string, TrimmedCurve[]>;
+    key: string;
+  }>({ count: 0, curves: new Map(), key: "" });
   const hidden = React.useMemo(() => {
     if (state.played.length === 0) return null;
     // Once revealed, the grid also covers every true year so the posterior
@@ -792,6 +799,31 @@ export default function Board(props: Props) {
     return { board: boardForCards(state.played, bounds, cover) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [priorsKey, bounds, revealed]);
+
+  React.useEffect(() => {
+    const saved = savedHistory.current;
+    const count = state.played.length;
+    // A new game: start over.
+    if (count === 0 || count < saved.count) {
+      saved.count = 0;
+      saved.curves = new Map();
+      saved.key = "";
+    }
+    if (revealed || !hidden || count === 0) return;
+    if (count === saved.count && priorsKey === saved.key) return;
+    // Same placement, priors changed: replace that snapshot, don't add one.
+    const replace = count === saved.count;
+    const curves = trimBoard(hidden.board);
+    state.played.forEach((card, i) => {
+      const list = saved.curves.get(card.id) ?? [];
+      if (replace && list.length > 0) list[list.length - 1] = curves[i];
+      else list.push(curves[i]);
+      saved.curves.set(card.id, list);
+    });
+    saved.count = count;
+    saved.key = priorsKey;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hidden, revealed]);
 
   // The board before the latest placement, to show how it moved every card.
   const previous = React.useMemo(() => {
@@ -826,20 +858,22 @@ export default function Board(props: Props) {
       : null;
 
   // At the end: the tapped card's posterior after each placement from its
-  // own onwards (the last is the final posterior).
+  // own onwards (the last is the final posterior). Saved during play; if the
+  // saved list doesn't match (e.g. a game restored from storage), rebuild it.
   const focusedHistory = React.useMemo(() => {
     if (!revealed || !focusedCard) return null;
     const order = placementOrder(state.played);
     const start = order.findIndex((card) => card.id === focusedCard.id);
     if (start < 0) return null;
-    const steps: { board: HiddenBoard; index: number }[] = [];
+    const saved = savedHistory.current.curves.get(focusedCard.id);
+    if (saved && saved.length === order.length - start) return saved;
+    const steps: TrimmedCurve[] = [];
     for (let k = start; k < order.length; k += 1) {
       const placed = new Set(order.slice(0, k + 1).map((card) => card.id));
       const subset = state.played.filter((card) => placed.has(card.id));
-      steps.push({
-        board: boardForCards(subset, bounds),
-        index: subset.findIndex((card) => card.id === focusedCard.id),
-      });
+      const board = boardForCards(subset, bounds);
+      const index = subset.findIndex((card) => card.id === focusedCard.id);
+      steps.push(trimCurve(board.grid, board.step, board.marginals[index]));
     }
     return steps;
     // eslint-disable-next-line react-hooks/exhaustive-deps
