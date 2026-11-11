@@ -6,6 +6,9 @@ export interface RevealDetail {
   prior: null | string;
   /** "best" / "worst" prior by log score, if this card is either. */
   rank: "best" | "worst" | null;
+  /** "best" / "worst" learning: the biggest / smallest gain in log score at
+   * the true year from prior to posterior. */
+  learning: "best" | "worst" | null;
 }
 
 export interface HiddenDatesValue {

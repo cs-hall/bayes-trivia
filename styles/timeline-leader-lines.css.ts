@@ -50,14 +50,11 @@ export const tickLabel = style({
   fontVariantNumeric: "tabular-nums",
 });
 
-/** After the reveal: card → true year, in orange. */
-export const trueLine = style([
-  line,
-  {
-    stroke: trueColor,
-    strokeOpacity: 0.9,
-  },
-]);
+/** After the reveal: card → true year, in sage. Opacity is set per line,
+ * like the posterior lines, so the tapped card stands out. */
+export const trueLine = style([line, { stroke: trueColor }]);
+
+export const trueLineFocused = style([lineFocused, { stroke: trueColor }]);
 
 export const trueDot = style({
   fill: trueColor,

@@ -11,7 +11,8 @@ import * as styles from "../styles/calibration-review.css";
 interface Props {
   /** Every scored card on this device, this game included. */
   history: CalibrationRecord[];
-  highscore: number;
+  /** Omitted for the daily game, which has no best. */
+  highscore?: number;
   /** This game's cards (those with a prior). */
   records: CalibrationRecord[];
   score: number;
@@ -149,9 +150,11 @@ export default function CalibrationReview(props: Props) {
       <div className={styles.headline}>
         <Score score={score} title="Score" />
         <span className={styles.headlineEnd}>
-          <span className={styles.best}>
-            Best <b>{highscore}</b>
-          </span>
+          {highscore !== undefined ? (
+            <span className={styles.best}>
+              Best <b>{highscore}</b>
+            </span>
+          ) : null}
           <button
             aria-expanded={!collapsed}
             aria-label={collapsed ? "Show game review" : "Hide game review"}

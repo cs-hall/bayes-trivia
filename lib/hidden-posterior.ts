@@ -495,6 +495,19 @@ export function summariseHiddenGap(
  * [year - 1/2, year + 1/2], renormalised to the known year bounds. Higher
  * (closer to 0) is better; a confident miss scores very low.
  */
+/** Log posterior probability of the true year (per year), for a board card.
+ * Floored so a posterior that ruled the true year out stays finite. */
+export function posteriorLogScore(
+  board: HiddenBoard,
+  index: number,
+  year: number,
+): number {
+  const mass = board.marginals[index];
+  const bin = Math.round((year - board.grid[0]) / board.step);
+  const p = mass && bin >= 0 && bin < mass.length ? mass[bin] : 0;
+  return Math.log(Math.max(p / board.step, 1e-300));
+}
+
 export function priorLogScore(
   prior: Prior,
   year: number,

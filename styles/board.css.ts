@@ -97,7 +97,8 @@ export const topRevealed = style({
 
 export const bottomRevealed = style({
   flex: "0 0 auto",
-  // Room for the card row plus the year, prior and posterior under it.
-  minHeight: `calc(${vars.size.cardHeight} + 7.5rem)`,
+  // Room for the card row plus the year, prior and posterior under it, and
+  // a "Best / Worst learning" tag.
+  minHeight: `calc(${vars.size.cardHeight} + 9.5rem)`,
   paddingBottom: vars.space.lg,
 });
