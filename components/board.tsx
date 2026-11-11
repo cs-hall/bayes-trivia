@@ -59,6 +59,8 @@ const VAGUE_PRIOR_SIGMA = 1000;
 function boardForCards(
   cards: PlayedCard[],
   bounds: ReturnType<typeof resolveBounds>,
+  /** Years the grid must reach (the true years, once revealed). */
+  cover: number[] = [],
 ): HiddenBoard {
   const known = cards
     .map((card) => card.played.prior)
@@ -70,7 +72,7 @@ function boardForCards(
   const priors = cards.map(
     (card) => card.played.prior ?? { mu: fallbackMu, sigma: VAGUE_PRIOR_SIGMA },
   );
-  return buildHiddenBoard(priors, bounds);
+  return buildHiddenBoard(priors, bounds, cover);
 }
 
 /** Cards in the order they were placed. */
@@ -781,13 +783,15 @@ export default function Board(props: Props) {
         `${card.id}:${card.played.prior?.mu}:${card.played.prior?.sigma}`,
     )
     .join("|");
+  const revealed = state.lives <= 0 || isDeckExhausted;
   const hidden = React.useMemo(() => {
     if (state.played.length === 0) return null;
-    return { board: boardForCards(state.played, bounds) };
+    // Once revealed, the grid also covers every true year so the posterior
+    // can be scored exactly there.
+    const cover = revealed ? state.played.map((card) => card.year) : [];
+    return { board: boardForCards(state.played, bounds, cover) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [priorsKey, bounds]);
-
-  const revealed = state.lives <= 0 || isDeckExhausted;
+  }, [priorsKey, bounds, revealed]);
 
   // The board before the latest placement, to show how it moved every card.
   const previous = React.useMemo(() => {

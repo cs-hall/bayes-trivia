@@ -227,3 +227,55 @@ test("posteriorLogScore: order information can help or hurt at the truth", () =>
   assert.ok(hurt < 0, `hurt ${hurt}`);
   assert.ok(Number.isFinite(posteriorLogScore(board, 0, 2020)));
 });
+
+test("contradicted confident priors still get exact, ordered posteriors", () => {
+  const bounds = { min: -1000, max: 2026 };
+  // Card 0 is truly first but the player was sure it was ~2000 and the next
+  // card ~1300 (and the mirror case): the normals overlap only around 1e-2000,
+  // which used to round to an all-zero posterior.
+  for (const priors of [
+    [
+      { mu: 2000, sigma: 10 },
+      { mu: 1300, sigma: 10 },
+    ],
+    [
+      { mu: 600, sigma: 5 },
+      { mu: 100, sigma: 5 },
+    ],
+  ]) {
+    const board = buildHiddenBoard(priors, bounds);
+    for (const m of board.marginals) {
+      const total = m.reduce((a, b) => a + b, 0);
+      assert.ok(Math.abs(total - 1) < 1e-9, `mass ${total}`);
+    }
+    const [first, second] = board.posteriors;
+    assert.ok(
+      first.median <= second.median,
+      `${first.median} ${second.median}`,
+    );
+    // They meet in between, where the order squeezes both.
+    assert.ok(
+      first.median > priors[1].mu - 50 && second.median < priors[0].mu + 50,
+    );
+    const odds = hiddenGapProbabilities(board, { mu: 1500, sigma: 100 });
+    assert.ok(Math.abs(odds.reduce((a, b) => a + b, 0) - 1) < 1e-9);
+  }
+});
+
+test("posteriorLogScore is exact far from the posterior", () => {
+  // Grid covers the true year (as at the reveal).
+  const board = buildHiddenBoard(
+    [{ mu: 1900, sigma: 5 }],
+    { min: 0, max: 2026 },
+    [1500],
+  );
+  const score = posteriorLogScore(board, 0, 1500);
+  // One card: the posterior is the prior, so the scores agree, and both are
+  // brutally low (~ −3200) rather than floored.
+  const prior = priorLogScore({ mu: 1900, sigma: 5 }, 1500, {
+    min: 0,
+    max: 2026,
+  });
+  assert.ok(score < -3000, `${score}`);
+  assert.ok(Math.abs(score - prior) < 1, `${score} vs ${prior}`);
+});
