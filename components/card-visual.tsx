@@ -210,10 +210,38 @@ export default function CardVisual(props: Props) {
             </motion.div>
             {revealDetail ? (
               <div className={styles.revealDetail}>
-                {revealDetail.prior !== null ? (
-                  <span>Prior {revealDetail.prior}</span>
+                <div
+                  className={
+                    revealDetail.learning === "best"
+                      ? styles.bestLearningYears
+                      : revealDetail.learning === "worst"
+                        ? styles.worstLearningYears
+                        : styles.revealYears
+                  }
+                >
+                  {revealDetail.prior !== null ? (
+                    <span>Prior {revealDetail.prior}</span>
+                  ) : null}
+                  <span>Posterior {revealDetail.posterior}</span>
+                </div>
+                {revealDetail.learning ? (
+                  <span
+                    className={
+                      revealDetail.learning === "best"
+                        ? styles.bestLearningTag
+                        : styles.worstLearningTag
+                    }
+                    title={
+                      revealDetail.learning === "best"
+                        ? "The placements moved this card closest to its true year, relative to your prior"
+                        : "The placements moved this card furthest from its true year, relative to your prior"
+                    }
+                  >
+                    {revealDetail.learning === "best"
+                      ? "Best learning"
+                      : "Worst learning"}
+                  </span>
                 ) : null}
-                <span>Posterior {revealDetail.posterior}</span>
               </div>
             ) : null}
           </div>

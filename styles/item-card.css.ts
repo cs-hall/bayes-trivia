@@ -359,6 +359,61 @@ export const worstPriorTag = style([
   { background: vars.color.danger },
 ]);
 
+/** Prior / posterior years under the true year. */
+export const revealYears = style({
+  alignItems: "center",
+  display: "flex",
+  flexDirection: "column",
+});
+
+/** Best / worst learning: the years ringed and tinted green / red. */
+const learningYears = style([
+  revealYears,
+  {
+    borderRadius: vars.radius.sm,
+    fontWeight: vars.fontWeight.semibold,
+    padding: `${vars.space.xxs} ${vars.space.xs}`,
+  },
+]);
+export const bestLearningYears = style([
+  learningYears,
+  {
+    background: `color-mix(in srgb, ${vars.color.success} 16%, transparent)`,
+    boxShadow: `inset 0 0 0 2px ${vars.color.success}`,
+    color: vars.color.text,
+  },
+]);
+export const worstLearningYears = style([
+  learningYears,
+  {
+    background: `color-mix(in srgb, ${vars.color.danger} 16%, transparent)`,
+    boxShadow: `inset 0 0 0 2px ${vars.color.danger}`,
+    color: vars.color.text,
+  },
+]);
+
+/** "Best learning" / "Worst learning": the prior badge's style, in flow
+ * under the years. */
+const learningTag = style({
+  borderRadius: vars.radius.pill,
+  color: "#ffffff",
+  fontFamily: vars.font.body,
+  fontSize: vars.fontSize.xs,
+  fontWeight: vars.fontWeight.semibold,
+  lineHeight: 1,
+  marginTop: vars.space.xxs,
+  padding: `${vars.space.xxs} ${vars.space.sm}`,
+  whiteSpace: "nowrap",
+});
+export const bestLearningTag = style([
+  learningTag,
+  { background: vars.color.success },
+]);
+export const worstLearningTag = style([
+  learningTag,
+  { background: vars.color.danger },
+]);
+
 /** Best / worst prior (by log score): a green / red glow around the card. */
 export const bestPriorCard = style({});
 export const worstPriorCard = style({});

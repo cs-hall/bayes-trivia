@@ -290,15 +290,19 @@ export default function TimelineLeaderLines(props: Props) {
             {trueYears ? (
               <>
                 <path
-                  className={styles.trueLine}
+                  className={focused ? styles.trueLineFocused : styles.trueLine}
                   ref={(node) => {
                     truePathRefs.current[i] = node;
                   }}
+                  strokeOpacity={
+                    focused ? 1 : focusedIndex !== null ? 0.2 : 0.6
+                  }
                   visibility="hidden"
                 />
                 <circle
                   className={styles.trueDot}
-                  r={3.5}
+                  fillOpacity={focused ? 1 : focusedIndex !== null ? 0.35 : 0.8}
+                  r={focused ? 4.5 : 3.5}
                   ref={(node) => {
                     trueDotRefs.current[i] = node;
                   }}

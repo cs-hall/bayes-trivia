@@ -124,6 +124,15 @@ export default function GameOver(props: Props) {
             dailyLabel={`Daily / ${formattedDailyDate}`}
             nextDailyText={nextDailyText}
             onShare={share}
+            review={
+              calibrationRecords.length > 0 ? (
+                <CalibrationReview
+                  history={calibrationHistory}
+                  records={calibrationRecords}
+                  score={score}
+                />
+              ) : undefined
+            }
             score={score}
             shareText={shareText}
           />

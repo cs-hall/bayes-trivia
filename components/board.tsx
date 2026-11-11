@@ -15,6 +15,7 @@ import {
   Prior,
   PRIOR_SIGMA_MAX,
   PRIOR_SIGMA_MIN,
+  posteriorLogScore,
   priorLogScore,
   resolveBounds,
 } from "../lib/hidden-posterior";
@@ -880,6 +881,7 @@ export default function Board(props: Props) {
     if (revealed && hidden) {
       revealDetails = {};
       const scores: Array<{ id: string; score: number }> = [];
+      const gains: Array<{ id: string; score: number }> = [];
       state.played.forEach((card, index) => {
         const posterior = hidden.board.posteriors[index];
         const prior = card.played.prior;
@@ -891,23 +893,38 @@ export default function Board(props: Props) {
         revealDetails![card.id] = {
           posterior: posterior ? formatPlainYear(posterior.median) : "?",
           prior: prior ? formatPlainYear(clamp(prior.mu)) : null,
+          learning: null,
           rank: null,
         };
         if (prior) {
-          scores.push({
-            id: card.id,
-            score: priorLogScore(prior, card.year, bounds),
-          });
+          const priorScore = priorLogScore(prior, card.year, bounds);
+          scores.push({ id: card.id, score: priorScore });
+          // Learning: how much the order moved belief toward the truth.
+          if (posterior) {
+            gains.push({
+              id: card.id,
+              score:
+                posteriorLogScore(hidden.board, index, card.year) - priorScore,
+            });
+          }
         }
       });
-      if (scores.length >= 2) {
-        const sorted = [...scores].sort((a, b) => b.score - a.score);
+      const extremes = (list: Array<{ id: string; score: number }>) => {
+        if (list.length < 2) return null;
+        const sorted = [...list].sort((a, b) => b.score - a.score);
         const best = sorted[0];
         const worst = sorted[sorted.length - 1];
-        if (best.score > worst.score) {
-          revealDetails[best.id].rank = "best";
-          revealDetails[worst.id].rank = "worst";
-        }
+        return best.score > worst.score ? { best, worst } : null;
+      };
+      const priorExtremes = extremes(scores);
+      if (priorExtremes) {
+        revealDetails[priorExtremes.best.id].rank = "best";
+        revealDetails[priorExtremes.worst.id].rank = "worst";
+      }
+      const learningExtremes = extremes(gains);
+      if (learningExtremes) {
+        revealDetails[learningExtremes.best.id].learning = "best";
+        revealDetails[learningExtremes.worst.id].learning = "worst";
       }
     }
     return {

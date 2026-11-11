@@ -4,6 +4,7 @@ import {
   buildHiddenBoard,
   buildHiddenDecisionMap,
   hiddenGapProbabilities,
+  posteriorLogScore,
   priorLogScore,
   summariseHiddenGap,
 } from "../lib/hidden-posterior";
@@ -203,4 +204,26 @@ test("prior log score rewards accurate, honest priors", () => {
     Math.log(2),
     0.02,
   );
+});
+
+test("posteriorLogScore: order information can help or hurt at the truth", () => {
+  const bounds = { min: 0, max: 2026 };
+  // Card 1 is after card 0. Card 0's prior is vague; card 1's is sharp.
+  const board = buildHiddenBoard(
+    [
+      { mu: 1500, sigma: 300 },
+      { mu: 1600, sigma: 20 },
+    ],
+    bounds,
+  );
+  const prior0 = { mu: 1500, sigma: 300 };
+  // Truth early: the order (card 0 before ~1600) helps.
+  const helped =
+    posteriorLogScore(board, 0, 1300) - priorLogScore(prior0, 1300, bounds);
+  // Truth late (after 1700): the other card's confident prior steers it away.
+  const hurt =
+    posteriorLogScore(board, 0, 1800) - priorLogScore(prior0, 1800, bounds);
+  assert.ok(helped > 0, `helped ${helped}`);
+  assert.ok(hurt < 0, `hurt ${hurt}`);
+  assert.ok(Number.isFinite(posteriorLogScore(board, 0, 2020)));
 });
