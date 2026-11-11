@@ -170,12 +170,14 @@ test("year bounds truncate priors and posteriors", () => {
   assert.ok(probs[0] > 0.5); // pushed to the lower bound: likely before both
 });
 
-test("a prior entirely outside the bounds sits at the nearest bound", () => {
+test("a prior entirely outside the bounds sits near the nearest bound", () => {
   const board = buildHiddenBoard([{ mu: 100, sigma: 5 }], {
     max: 1900,
     min: 1600,
   });
-  assert.equal(board.posteriors[0].median, 1600);
+  // Only the heavy-tailed floor reaches the bounds, piled up at the near end.
+  const { median } = board.posteriors[0];
+  assert.ok(median >= 1600 && median < 1650, `${median}`);
 });
 
 test("prior log score rewards accurate, honest priors", () => {
@@ -190,10 +192,11 @@ test("prior log score rewards accurate, honest priors", () => {
     priorLogScore({ mu: 1850, sigma: 50 }, 1860) >
       priorLogScore({ mu: 1850, sigma: 50 }, 1950),
   );
-  // A confident miss scores far worse than an honest wide prior.
+  // A confident miss scores far worse than an honest wide prior (the floor
+  // caps how far, so it's ~17 nats rather than ~1250).
   assert.ok(
     priorLogScore({ mu: 1850, sigma: 2 }, 1950) <
-      priorLogScore({ mu: 1850, sigma: 100 }, 1950) - 100,
+      priorLogScore({ mu: 1850, sigma: 100 }, 1950) - 10,
   );
   // Extreme tails stay finite.
   assert.ok(Number.isFinite(priorLogScore({ mu: 0, sigma: 1 }, 2000)));
@@ -226,4 +229,35 @@ test("posteriorLogScore: order information can help or hurt at the truth", () =>
   assert.ok(helped > 0, `helped ${helped}`);
   assert.ok(hurt < 0, `hurt ${hurt}`);
   assert.ok(Number.isFinite(posteriorLogScore(board, 0, 2020)));
+});
+
+test("a confident prior the order contradicts still gets a sensible posterior", () => {
+  // Card 0 is (truly) before card 1, but the player was sure it was ~2000,
+  // and sure card 1 was ~1300: the normals alone underflow to zero overlap.
+  const board = buildHiddenBoard(
+    [
+      { mu: 2000, sigma: 10 },
+      { mu: 1300, sigma: 10 },
+    ],
+    { min: -1000, max: 2026 },
+  );
+  const [first, second] = board.posteriors;
+  for (const m of board.marginals) {
+    const total = m.reduce((a, b) => a + b, 0);
+    assert.ok(Math.abs(total - 1) < 1e-9, `mass ${total}`);
+  }
+  assert.ok(first.median <= second.median, `${first.median} ${second.median}`);
+  assert.ok(first.median >= -1000 && first.median <= 2026, `${first.median}`);
+  // The order wins: card 0 lands before ~1300.
+  assert.ok(first.median < 1310, `${first.median}`);
+});
+
+test("priorLogScore: the floor caps how bad a far miss can score", () => {
+  const prior = { mu: 2000, sigma: 10 };
+  const bounds = { min: -1000, max: 2026 };
+  const far = priorLogScore(prior, 500, bounds);
+  const near = priorLogScore(prior, 2000, bounds);
+  assert.ok(Number.isFinite(far));
+  assert.ok(far > -40, `${far}`);
+  assert.ok(near > far);
 });

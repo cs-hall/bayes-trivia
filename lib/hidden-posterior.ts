@@ -99,6 +99,33 @@ export interface HiddenGapSummary {
   xs: number[];
 }
 
+/**
+ * "Anything is possible": every prior is a mixture of the player's normal
+ * (weight 1 − PRIOR_FLOOR) and a Cauchy with the same centre and scale
+ * (weight PRIOR_FLOOR). The Cauchy's heavy tails never round to zero, so a
+ * confident prior that the order contradicts still gets a sensible posterior
+ * instead of collapsing to an impossible one.
+ */
+export const PRIOR_FLOOR = 1e-6;
+
+function cauchyCdf(z: number) {
+  return 0.5 + Math.atan(z) / Math.PI;
+}
+
+/** P(a < year ≤ b) under the floored prior (not truncated). */
+function priorMassBetween(prior: Prior, a: number, b: number) {
+  const s = Math.max(prior.sigma, PRIOR_SIGMA_MIN);
+  const za = (a - prior.mu) / s;
+  const zb = (b - prior.mu) / s;
+  // Upper tail: use 1 − cdf on the other side to keep precision.
+  const normal =
+    za > 0 ? normCdf(-za) - normCdf(-zb) : normCdf(zb) - normCdf(za);
+  return (
+    (1 - PRIOR_FLOOR) * Math.max(0, normal) +
+    PRIOR_FLOOR * Math.max(0, cauchyCdf(zb) - cauchyCdf(za))
+  );
+}
+
 function binMass(
   grid: Float64Array,
   step: number,
@@ -107,23 +134,21 @@ function binMass(
   bounds: YearBounds = DEFAULT_BOUNDS,
 ) {
   const half = step / 2;
-  const s = Math.max(prior.sigma, PRIOR_SIGMA_MIN);
-  let prev = normCdf((grid[0] - half - prior.mu) / s);
   let total = 0;
   let first = -1;
   let last = -1;
   for (let j = 0; j < grid.length; j += 1) {
-    const next = normCdf((grid[j] + half - prior.mu) / s);
     // Years outside the bounds are impossible.
     const inside =
       grid[j] + half > bounds.min - 0.5 && grid[j] - half < bounds.max + 0.5;
-    out[j] = inside ? Math.max(0, next - prev) : 0;
+    out[j] = inside
+      ? priorMassBetween(prior, grid[j] - half, grid[j] + half)
+      : 0;
     if (inside) {
       if (first < 0) first = j;
       last = j;
     }
     total += out[j];
-    prev = next;
   }
   // A prior far outside the bounds has (numerically) no mass inside them:
   // its truncated limit is the nearest allowed year.
@@ -344,13 +369,12 @@ export function priorMassOnGrid(board: HiddenBoard, prior: Prior) {
 export function hiddenGapProbabilities(board: HiddenBoard, prior: Prior) {
   const { grid, step, gapGivenX } = board;
   const size = grid.length;
-  const s = Math.max(prior.sigma, PRIOR_SIGMA_MIN);
   const mass = new Float64Array(size);
   binMass(grid, step, prior, mass, board.bounds);
   // Mass below the grid only counts when there is no lower bound.
   const leftTail = Number.isFinite(board.bounds.min)
     ? 0
-    : normCdf((grid[0] - step / 2 - prior.mu) / s);
+    : priorMassBetween(prior, -Infinity, grid[0] - step / 2);
   let total = leftTail;
   for (let j = 0; j < size; j += 1) total += mass[j];
   const probs = gapGivenX.map((w) => {
@@ -514,11 +538,9 @@ export function priorLogScore(
   bounds: YearBounds = DEFAULT_BOUNDS,
 ): number {
   const s = Math.max(prior.sigma, PRIOR_SIGMA_MIN);
-  const cdf = (x: number) => normCdf((x - prior.mu) / s);
-  const lo = Number.isFinite(bounds.min) ? cdf(bounds.min - 0.5) : 0;
-  const hi = cdf(bounds.max + 0.5);
-  const inside = hi - lo;
-  const mass = cdf(year + 0.5) - cdf(year - 0.5);
+  const lo = Number.isFinite(bounds.min) ? bounds.min - 0.5 : -Infinity;
+  const inside = priorMassBetween(prior, lo, bounds.max + 0.5);
+  const mass = priorMassBetween(prior, year - 0.5, year + 0.5);
   if (inside > 0 && mass > 0) return Math.log(mass / inside);
   // Underflow far in the tail: the log of the normal density is exact enough.
   const z = (year - prior.mu) / s;
