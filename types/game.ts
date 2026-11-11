@@ -39,6 +39,8 @@ export interface GameState {
   played: PlayedCard[];
   random: RandomSource;
   recentDeckIds: string[];
+  /** Tutorial: the cards to draw, in order, instead of drawing from decks. */
+  scriptedQueue?: PreparedCard[];
   usedQids: Set<string>;
   usedYears: Set<number>;
 }
