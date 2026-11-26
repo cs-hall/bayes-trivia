@@ -34,6 +34,10 @@ type Props = {
   transition?: Transition;
 };
 
+/** The hues of the theme's success (sage) and danger colours. */
+const CORRECT_HUE = 130;
+const INCORRECT_HUE = 7;
+
 const DEFAULT_TRANSITION: Transition = {
   type: "spring",
   stiffness: 340,
@@ -69,7 +73,15 @@ export default function CardVisual(props: Props) {
     [item.image, item.imageRepo, loadImage],
   );
   const { imageSrc } = useCardImage(imageCandidates);
-  const cardThemeStyle = useCardTheme(item.deckThemeHue);
+  // Placed cards are green when placed right and red when not; cards not
+  // yet placed are neutral grey.
+  const cardThemeStyle = useCardTheme(
+    "played" in item
+      ? item.played.correct
+        ? CORRECT_HUE
+        : INCORRECT_HUE
+      : null,
+  );
   const hiddenDates = useHiddenDates();
   const datesHidden = !hiddenDates.revealed;
   const revealDetail =
@@ -146,7 +158,6 @@ export default function CardVisual(props: Props) {
                         }}
                         src={imageSrc}
                       />
-                      <div aria-hidden="true" className={styles.imageTint} />
                     </div>
                   </div>
                 ) : null}
