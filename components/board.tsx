@@ -873,6 +873,9 @@ export default function Board(props: Props) {
     focusedIndex !== null && focusedIndex >= 0
       ? state.played[focusedIndex]
       : null;
+  // The card about to be placed was tapped: its prior is the curve to show.
+  const nextFocused =
+    focusedId !== null && !revealed && focusedId === state.next?.id;
 
   // At the end: the tapped card's posterior after each placement from its
   // own onwards (the last is the final posterior). Saved during play; if the
@@ -909,6 +912,7 @@ export default function Board(props: Props) {
       const target = event.target as Element | null;
       if (
         target?.closest("[data-card-id]") ||
+        target?.closest("[data-deck-card-id]") ||
         target?.closest("[data-focused-card-overlay]") ||
         target?.closest("[data-bayes-panel]")
       ) {
@@ -1114,7 +1118,11 @@ export default function Board(props: Props) {
         {showPanel && gapOddsExpanded && hidden ? (
           <TimelineLeaderLines
             focusedIndex={
-              focusedIndex !== null && focusedIndex >= 0 ? focusedIndex : null
+              focusedIndex !== null && focusedIndex >= 0
+                ? focusedIndex
+                : nextFocused
+                  ? -1
+                  : null
             }
             ids={state.played.map((card) => card.id)}
             latestIndex={latestIndex}
@@ -1123,10 +1131,10 @@ export default function Board(props: Props) {
             trueYears={revealed ? state.played.map((card) => card.year) : null}
           />
         ) : null}
-        {focusedCard && !revealed ? (
+        {(focusedCard || nextFocused) && focusedId !== null && !revealed ? (
           <FocusedCardOverlay
-            card={focusedCard}
-            onClose={() => setFocusedId(null)}
+            cardId={focusedId}
+            deck={nextFocused}
             rootRef={boardRef}
           />
         ) : null}
@@ -1145,6 +1153,7 @@ export default function Board(props: Props) {
             focusedHistory={focusedHistory}
             focusedPrior={focusedCard?.played.prior ?? null}
             focusedTitle={focusedCard?.title ?? null}
+            priorFocused={nextFocused}
             latestIndex={latestIndex}
             nudge={priorNudge}
             onConfirmFirstCard={() => {
@@ -1214,6 +1223,11 @@ export default function Board(props: Props) {
           {deckVisible && renderedDeckState ? (
             <NextItemList
               deckAnchorRef={deckAnchorRef}
+              onCardTap={
+                state.next && !revealed
+                  ? () => handleCardTap(state.next!.id)
+                  : undefined
+              }
               deckState={renderedDeckState.deckState}
               next={openingDealInFlight ? null : renderedDeckState.next}
               onDeckAnchorChange={handleDeckAnchorChange}

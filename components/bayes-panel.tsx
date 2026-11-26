@@ -48,6 +48,8 @@ interface Props {
   focusedIndex: number | null;
   focusedPrior: null | Prior;
   focusedTitle: null | string;
+  /** The card about to be placed was tapped: highlight its prior. */
+  priorFocused?: boolean;
   latestIndex: number | null;
   nudge: number;
   onConfirmFirstCard: () => void;
@@ -188,6 +190,7 @@ export default function BayesPanel(props: Props) {
     focusedIndex,
     focusedPrior,
     focusedTitle,
+    priorFocused = false,
     latestIndex,
     nudge,
     onConfirmFirstCard,
@@ -332,7 +335,8 @@ export default function BayesPanel(props: Props) {
     board !== null &&
     priorMu === null &&
     dragGap === null &&
-    focusedIndex === null;
+    focusedIndex === null &&
+    !priorFocused;
   const shiftCurves = React.useMemo(() => {
     if (!showShift || !board || !previous) return null;
     return board.marginals.map((mass, i) => {
@@ -729,7 +733,7 @@ export default function BayesPanel(props: Props) {
       }}
       type="button"
     >
-      {confirmReveal ? "Sure? End" : "Reveal"}
+      {confirmReveal ? "Sure? Give up" : "Give up"}
     </button>
   ) : null;
 
@@ -1092,7 +1096,7 @@ export default function BayesPanel(props: Props) {
                   key={`c${i}`}
                   stroke="currentColor"
                   strokeOpacity={
-                    focusedIndex !== null
+                    focusedIndex !== null || priorFocused
                       ? 0.12
                       : revealed
                         ? 0.55
@@ -1284,7 +1288,7 @@ export default function BayesPanel(props: Props) {
                 d={priorCurve}
                 fill="none"
                 stroke={styles.priorColor}
-                strokeWidth={2}
+                strokeWidth={priorFocused ? 3.5 : 2}
               />
             ) : null}
             {/* Reveal: a bar from each card's posterior median to its true year */}

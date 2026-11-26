@@ -18,9 +18,20 @@ type CardTheme = {
   shadow: string;
 };
 
-const cardThemeCache = new Map<number, CardTheme>();
+const cardThemeCache = new Map<number | null, CardTheme>();
 
-function createCardTheme(themeHue: number): CardTheme {
+/** A hue gives a tinted card; null gives a neutral grey one. */
+function createCardTheme(themeHue: number | null): CardTheme {
+  if (themeHue === null) {
+    return {
+      border: "hsl(0deg 0% 72%)",
+      fill: "hsl(0deg 0% 90%)",
+      foreground: "hsl(0deg 0% 20%)",
+      imageBorder: "hsl(0deg 0% 66%)",
+      muted: "hsl(0deg 0% 42%)",
+      shadow: "rgba(0, 0, 0, 0.12)",
+    };
+  }
   const tonedSaturation = 38;
   const tonedLightness = 84;
   const borderSaturation = tonedSaturation + 6;
@@ -38,7 +49,7 @@ function createCardTheme(themeHue: number): CardTheme {
   };
 }
 
-export function useCardTheme(themeHue: number): React.CSSProperties {
+export function useCardTheme(themeHue: number | null): React.CSSProperties {
   return React.useMemo(() => {
     const cachedTheme = cardThemeCache.get(themeHue);
     const theme = cachedTheme ?? createCardTheme(themeHue);

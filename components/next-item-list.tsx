@@ -32,6 +32,8 @@ interface NextItemListProps {
     point: { x: number; y: number },
     rect: DOMRect | null,
   ) => boolean;
+  /** A tap on the face-up card about to be placed. */
+  onCardTap?: () => void;
   reserve: PreparedCard | null;
   /** Show the hidden top card face up (the first card needs a prior). */
   revealTop?: boolean;
@@ -99,6 +101,7 @@ export default function NextItemList(props: NextItemListProps) {
     onCardDragMove,
     onCardDragStart,
     onCardDrop,
+    onCardTap,
     reserve,
     revealTop = false,
     visible,
@@ -148,11 +151,14 @@ export default function NextItemList(props: NextItemListProps) {
                   className={styles.topCardAnchor}
                 >
                   {revealTop ? (
-                    <CardVisual
-                      item={renderedNext}
-                      surface="deck"
-                      style={topCardStyle}
-                    />
+                    <div data-deck-card-id={renderedNext.id}>
+                      <CardVisual
+                        item={renderedNext}
+                        onClick={onCardTap}
+                        surface="deck"
+                        style={topCardStyle}
+                      />
+                    </div>
                   ) : (
                     <CardVisual
                       backVariant="deck"
@@ -182,6 +188,7 @@ export default function NextItemList(props: NextItemListProps) {
                   onDragMove={onCardDragMove}
                   onDragStart={onCardDragStart}
                   onDrop={onCardDrop}
+                  onTap={onCardTap}
                 />
               ) : null}
             </div>

@@ -11,6 +11,8 @@ interface DraggableDeckCardProps {
   onDragMove: (point: { x: number; y: number }, rect: DOMRect | null) => void;
   onDragStart: (point: { x: number; y: number }, rect: DOMRect | null) => void;
   onDrop: (point: { x: number; y: number }, rect: DOMRect | null) => boolean;
+  /** A tap (not a drag) on the card. */
+  onTap?: () => void;
 }
 
 export default function DraggableDeckCard(props: DraggableDeckCardProps) {
@@ -22,6 +24,7 @@ export default function DraggableDeckCard(props: DraggableDeckCardProps) {
     onDragMove,
     onDragStart,
     onDrop,
+    onTap,
   } = props;
   const x = useMotionValue(0);
   const y = useMotionValue(0);
@@ -65,6 +68,7 @@ export default function DraggableDeckCard(props: DraggableDeckCardProps) {
   return (
     <motion.div
       ref={handleCardRef}
+      data-deck-card-id={item.id}
       drag
       dragElastic={0.03}
       dragMomentum={false}
@@ -87,6 +91,10 @@ export default function DraggableDeckCard(props: DraggableDeckCardProps) {
             ease: [0.22, 1, 0.36, 1],
           });
         }
+      }}
+      onTap={() => {
+        // A tap that turned into a drag doesn't count.
+        if (!dragging) onTap?.();
       }}
       onDragStart={(_event, info: PanInfo) => {
         setDragging(true);
