@@ -552,8 +552,10 @@ function pickOpeningCards(
   return cards;
 }
 
-export function preloadImage(image: string): HTMLImageElement | null {
-  return preloadCardImageCandidates(createWikimediaImageCandidates(image));
+export function preloadImage(
+  card: Pick<Card, "image" | "imageRepo">,
+): HTMLImageElement | null {
+  return preloadCardImageCandidates(createWikimediaImageCandidates(card));
 }
 
 export function checkCorrect(
@@ -620,10 +622,7 @@ export function createGameState(
   state.played = [];
   state.next = firstCard;
   state.nextButOne = secondCard;
-  state.imageCache = [
-    preloadImage(firstCard.image),
-    preloadImage(secondCard.image),
-  ];
+  state.imageCache = [preloadImage(firstCard), preloadImage(secondCard)];
 
   return state;
 }
