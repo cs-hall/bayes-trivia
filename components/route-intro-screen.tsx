@@ -1,6 +1,6 @@
 import classNames from "classnames";
 import React from "react";
-import { formatTimeUntilNextDaily, getCurrentUtcDateKey } from "../lib/daily";
+import { formatTimeUntilNextDaily, getCurrentDailyDateKey } from "../lib/daily";
 import { GameDifficulty } from "../types/game";
 import { GameMode, SelectionRoute } from "../types/routes";
 import DailyMetaChips, {
@@ -38,7 +38,7 @@ export default function RouteIntroScreen(props: Props) {
   } = props;
   const showDifficulty =
     mode === "free-play" && typeof setDifficulty === "function";
-  const resolvedDailyDateKey = dailyDateKey ?? getCurrentUtcDateKey();
+  const resolvedDailyDateKey = dailyDateKey ?? getCurrentDailyDateKey();
   const introCopy = "Place the cards on the timeline in the correct order.";
   const [nextDailyText, setNextDailyText] = React.useState(() =>
     formatTimeUntilNextDaily(new Date(), "Next in"),

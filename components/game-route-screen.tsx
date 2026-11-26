@@ -1,7 +1,7 @@
 import classNames from "classnames";
 import React from "react";
 import { getSelectionRoutePath } from "../lib/categories";
-import { DAILY_DIFFICULTY, getCurrentUtcDateKey } from "../lib/daily";
+import { DAILY_DIFFICULTY, getCurrentDailyDateKey } from "../lib/daily";
 import {
   clearDailyGameSnapshot,
   loadDailyGameSnapshot,
@@ -159,7 +159,7 @@ export default function GameRouteScreen(props: Props) {
     () => buildGameStatePath(mode, selectionRoute),
     [mode, selectionRoute],
   );
-  const dateKey = React.useMemo(() => getCurrentUtcDateKey(), []);
+  const dateKey = React.useMemo(() => getCurrentDailyDateKey(), []);
   const difficulty =
     mode === "daily" ? DAILY_DIFFICULTY : freePlayDifficulty.difficulty;
   const difficultyReady = mode === "daily" ? true : freePlayDifficulty.ready;

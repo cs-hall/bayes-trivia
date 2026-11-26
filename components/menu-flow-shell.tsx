@@ -15,7 +15,7 @@ import {
   getSelectionRouteTitle,
   getSelectorBreadcrumbsForNode,
 } from "../lib/categories";
-import { getCurrentUtcDateKey } from "../lib/daily";
+import { getCurrentDailyDateKey } from "../lib/daily";
 import { loadDailyGameSnapshot } from "../lib/daily-storage";
 import {
   getSupportedDifficultiesForDeckId,
@@ -208,7 +208,7 @@ export default function MenuFlowShell() {
   const playRoute = React.useMemo(() => parsePlayRoute(path), [path]);
   const rootFreePlayView =
     playRoute?.kind === "root-selector" ? playRoute.view : "landing";
-  const dailyDateKey = React.useMemo(() => getCurrentUtcDateKey(), []);
+  const dailyDateKey = React.useMemo(() => getCurrentDailyDateKey(), []);
   const [dailyCompletionReady, setDailyCompletionReady] = React.useState(
     path !== "/daily",
   );
@@ -248,7 +248,7 @@ export default function MenuFlowShell() {
     }
 
     const intervalId = window.setInterval(() => {
-      if (getCurrentUtcDateKey() !== dailyDateKey) {
+      if (getCurrentDailyDateKey() !== dailyDateKey) {
         window.location.reload();
       }
     }, 30000);
