@@ -2,7 +2,7 @@ import React from "react";
 import AppHead from "../components/app-head";
 import DailyEntryScreen from "../components/daily-entry-screen";
 import GameRouteScreen from "../components/game-route-screen";
-import { getCurrentUtcDateKey } from "../lib/daily";
+import { getCurrentDailyDateKey } from "../lib/daily";
 import { loadDailyGameSnapshot } from "../lib/daily-storage";
 import { getShareResults } from "../lib/share";
 
@@ -14,7 +14,7 @@ export default function DailyPage() {
   const [completedScore, setCompletedScore] = React.useState<null | number>(
     null,
   );
-  const dateKey = React.useMemo(() => getCurrentUtcDateKey(), []);
+  const dateKey = React.useMemo(() => getCurrentDailyDateKey(), []);
 
   React.useEffect(() => {
     const snapshot = loadDailyGameSnapshot();
